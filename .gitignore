@@ -15,3 +15,6 @@ dependencies.lock
 .vscode/
 .idea/
 .codegraph/
+
+# Flash dumps (large, board-specific)
+/backups/

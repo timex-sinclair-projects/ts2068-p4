@@ -53,3 +53,19 @@ Present: git, gh, cmake, python3 (pyenv), perl, autoconf, automake, pkg-config.
 - Checked by building `examples/get-started/hello_world` for `esp32p4` with the three pre-rev3 settings and `CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y`: builds cleanly, and the resulting sdkconfig has `CONFIG_ESP32P4_REV_MIN_FULL=0`. Not flashed.
 
 Standalone **esptool v5.6.0** is also installed (`uv tool install esptool`, at `~/.local/bin/esptool`). ESP-IDF's own env carries esptool 4.12.0, so v5 syntax (`flash-id`, `read-flash`) works only with the standalone one.
+
+## Factory flash backup (2026-10-30)
+
+The full 16 MB flash, as shipped by Elecrow, is in `backups/crowpanel-p4-factory-16MB.bin` (git-ignored, so it lives only on this Mac; copy it somewhere safe).
+
+- SHA-256 `a6cca95985227934bb3c206c40bdbf67f5a2e46e99f02aa1eba7b7d968740b35`
+- Checked with `esptool verify-flash 0 …` against the chip: digest matched.
+- Factory partition table (at 0x8000): `nvs` 0x9000 24K, `phy_init` 0xf000 4K, `factory` app 0x10000 11M, `storage` spiffs 0xb10000 4M.
+
+**Restore:**
+
+```bash
+esptool --port /dev/cu.wchusbserial10 --baud 230400 write-flash 0 backups/crowpanel-p4-factory-16MB.bin
+```
+
+**Serial speed limit:** the CH340 link fails at 460800 and 921600 baud ("Corrupt data, expected 0x1000 bytes"), on every attempt. 230400 is reliable. Use `--baud 230400` (or `-b 230400` with `idf.py`) for all flashing; a full 16 MB read takes about 13 minutes. Reads were done in 1 MB chunks with retries, so one glitch costs one chunk.
