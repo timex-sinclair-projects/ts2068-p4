@@ -32,5 +32,7 @@ Firmware: tspico-firmware-build `v2.3.1` (`58ccbcd`), from the `firmware` submod
 cd firmware && ./tools/build-basic.sh
 FUSE=~/esp/ref/fuse-tspico/fuse TSPICO_TRACE=1 python3 tools/emu/fuse_smoke.py --keep   # -> /tmp/fuse_pico_host.out
 TSPICO_TRACE=1 python3 tools/emu/smoke.py --keep                                         # -> /tmp/pico_host.out
-grep '^\[bus\]' LOG | sed 's/^\[bus\] //' > NAME.frames
+python3 -c 'import re,sys; print("".join("%s %s -> %s\n" % f for f in re.findall(r"\[bus\] (\w+) ([0-9A-F]{2}) -> ([0-9A-F]{2})", open(sys.argv[1]).read())), end="")' LOG > NAME.frames
+# Not a line-based grep: pico_host prints frames and telemetry from two threads, so a
+# telemetry line can be glued onto the end of a frame line.
 ```

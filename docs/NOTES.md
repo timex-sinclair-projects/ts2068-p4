@@ -113,3 +113,21 @@ Gotcha: at firmware `v2.3.1`, `src/assets/*.tap` are generated, not committed. R
 The ROM at `v2.3.1` is `src/rom/TSPICO-23.ROM`, not the `TSPICO-21.ROM` PLAN.md §2 names. Phase 3's ROM split should use whichever the pinned firmware carries.
 
 Traces are in `test/traces/` (see its README).
+
+## Phase 1 progress (2026-10-30)
+
+**Board facts from Elecrow's V1.2 files** (repo `Elecrow-RD/CrowPanel-Advanced-7inch-ESP32-P4-HMI-AI-Display-1024x600-IPS-Touch-Screen`: schematic `Eagle_SCH&PCB/1.2/*.sch`, examples under `example/V1.2/idf-code/`). Our board's PCB revision isn't confirmed yet; check the silkscreen.
+
+- **microSD:** SDMMC slot 0, **1-bit**: CLK GPIO43, CMD GPIO44, D0 GPIO39 (DAT1-3 not wired). No card detect. Card VDD on the 3.3 V rail; the pads (VDDPST_5) are fed by the P4's LDO4, MicroPython's default SD LDO channel on P4. Elecrow's own readme says the schematic puts SD on GPIO14-19; that's wrong, those go to the C6. In `tools/p4/board.json`.
+- **USB-C:** J1 → CH340K → UART0 (GPIO37/38), with auto-reset. J16 → the P4's USB OTG pins. **J16's VBUS only feeds the board through diodes**, so a USB keyboard on J16 would need a powered hub or a VBUS-injecting adapter (Q3; inferred from the schematic).
+- **C6 link:** SDIO slot 1, 4-bit, GPIO14-19. Elecrow's example sdkconfig sets the C6 reset to GPIO54, but the schematic's C6_EN net is on **GPIO32**.
+- **Peripherals:** EK79007 MIPI-DSI panel, backlight PWM GPIO31; GT911 touch (I2C SDA 45, SCL 46, RST 40, INT 42; 0x5D or 0x14); LCD reset GPIO41; two NS4168 I2S amps (LRCLK 21, BCLK 22, DATA 23, enable GPIO30, active low); PDM mic (CLK 24, DATA 26).
+
+**MicroPython with p4bridge** (D4): built with
+`make BOARD=ESP32_GENERIC_P4 BOARD_VARIANT=PRE_REV3_C6_WIFI USER_C_MODULES=<repo>/usermods/micropython.cmake` in `~/esp/micropython/ports/esp32`. App 1,776,016 bytes (255,600 left). FreeRTOS tick is 100 Hz (`CONFIG_FREERTOS_HZ=100`), and the idle-task watchdog is off on both cores, so a spinning task on core 0 is allowed. A user module's qstrs must not clash with frozen ones: a dict key named `n` broke the build (`redeclaration of enumerator 'MP_QSTR_n'`).
+
+Checked from the REPL: HELLO → 1; Y reads 00 after an `OUT`; RX words 0x55 and 0x103 (port 0Fh); `put(b"AB")` and `put(0x143)` → `IN 0Eh` reads 41, 42, 43; an empty `IN 0Eh` reads 00 after 49 ms and counts an underrun. 1,000 status frames from Python take 14 ms (14 µs each, most of it the Python call).
+
+**The firmware on the P4:** `tools/p4/install.py` puts the pinned firmware (`TS/*.mpy` from mpy-cross), its files, and `tspico/py` on the flash. `p4host.start()` imports it under the stand-ins in **0.6 s** and it reaches its main loop (READY, boot pre-load queued) in **5.3 s**, 2 s of which is five failed SD attempts with no card in. Telemetry matches pico_host's (`LOAD_CONFIG enter: build=58ccbcd (HEAD)`, `ACTIVATE_MQ exit: SM active, Y=BUSY`).
+
+**Trace extraction bug, fixed:** pico_host prints frames and telemetry from two threads, so a telemetry line can be glued onto a frame line. A line-based grep left junk on one line of each `.frames` file (no frames were lost). Now extracted with a regex over the whole log (test/traces/README.md).

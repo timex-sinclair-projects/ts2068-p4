@@ -1,0 +1,5 @@
+{
+  "_source": "Elecrow-RD/CrowPanel-Advanced-7inch-ESP32-P4-HMI-AI-Display-1024x600-IPS-Touch-Screen, board V1.2: schematic nets SD1_SCK/CMD/D0 -> GPIO43/44/39, example Lesson08 bsp_sd.c (SDMMC slot 0, 1-bit, 10 MHz). DAT1-3 not wired; no card detect. Pad domain VDDPST_5 is fed by ESP32_LDO4, MicroPython's P4 default SD LDO channel.",
+  "sd": {"slot": 0, "width": 1, "sck": 43, "cmd": 44, "data": [39], "freq": 10000000},
+  "port": "/dev/cu.wchusbserial10"
+}

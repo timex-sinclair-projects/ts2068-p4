@@ -341,7 +341,7 @@ OUT0E 00 -> 00
 OUT0E 10 -> 00
 OUT0E 00 -> 00
 OUT0E 70 -> 00
-IN0E 00 -> 01[TLM 705656126183 dt=1295 tx=0 rx=4] main loop: PROCESS_CMD returned: pre=[66, 0, 35, 0, 0, 0, 0, 7, 0, 102]
+IN0E 00 -> 01
 IN0F 00 -> F7
 OUT0E 44 -> 00
 OUT0E 10 -> 00

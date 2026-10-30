@@ -2189,4 +2189,4 @@ IN0E 00 -> 41
 IN0E 00 -> 4D
 IN0E 00 -> 45
 IN0E 00 -> 53
-IN0E 00 -> 00[TLM 705771055978 dt=134796 tx=3 rx=0] SEND_MSG enter+loaded: msg='Current working dir is: ' msg1='/TAP/GAMES' st=1 verbose=False force=True
+IN0E 00 -> 00
