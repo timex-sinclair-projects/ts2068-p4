@@ -43,4 +43,13 @@ In `~/Documents/github`:
 
 ## Toolchain on this Mac (2026-10-30)
 
-Present: git, gh, cmake, python3 (pyenv), perl, autoconf, automake, pkg-config. Missing: ESP-IDF and ninja (ESP-IDF's installer provides its own).
+Present: git, gh, cmake, python3 (pyenv), perl, autoconf, automake, pkg-config.
+
+**ESP-IDF v5.5.2** installed 2026-10-30:
+
+- Source: `~/esp/esp-idf` (shallow clone of tag `v5.5.2`, 23 submodules), 649 MB.
+- Tools: `~/.espressif` (`./install.sh esp32p4`), 2.6 GB. Compiler `riscv32-esp-elf-gcc` 14.2.0 (crosstool-NG esp-14.2.0_20251107); Python env `idf5.5_py3.14_env` on Python 3.14.0.
+- Activate per shell with `. ~/esp/esp-idf/export.sh`. Its output must not be piped (`| tail` runs it in a subshell and loses the environment).
+- Checked by building `examples/get-started/hello_world` for `esp32p4` with the three pre-rev3 settings and `CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y`: builds cleanly, and the resulting sdkconfig has `CONFIG_ESP32P4_REV_MIN_FULL=0`. Not flashed.
+
+Standalone **esptool v5.6.0** is also installed (`uv tool install esptool`, at `~/.local/bin/esptool`). ESP-IDF's own env carries esptool 4.12.0, so v5 syntax (`flash-id`, `read-flash`) works only with the standalone one.
