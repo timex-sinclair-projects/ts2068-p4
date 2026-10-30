@@ -192,10 +192,10 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
   /docs            DECISIONS.md, NOTES.md
   /test            trace fixtures, Z80 test suites, BASIC test programs
   ```
-- [ ] Install the ESP-IDF version that MicroPython's P4 port requires. Read it from `ports/esp32/README.md`; don't guess. (Read 2026-10-30: v1.29.0 recommends ESP-IDF v5.5.2; see `docs/DECISIONS.md` D3. Chip revision is v1.3, so the variant is `PRE_REV3_C6_WIFI`: `docs/NOTES.md`.)
+- [x] Install the ESP-IDF version that MicroPython's P4 port requires. Read it from `ports/esp32/README.md`; don't guess. (Read 2026-10-30: v1.29.0 recommends ESP-IDF v5.5.2; see `docs/DECISIONS.md` D3. Chip revision is v1.3, so the variant is `PRE_REV3_C6_WIFI`: `docs/NOTES.md`.)
 - [x] Build the stock `ESP32_GENERIC_P4` MicroPython and flash it to the board to confirm the REPL works. (2026-10-30: v1.29.0 `PRE_REV3_C6_WIFI`; `docs/NOTES.md`.)
-- [ ] Build fuse-tspico on the desktop and confirm the TS-Pico works against `pico_host`. **This is the reference implementation.**
-- [ ] Record **reference traces** with `TSPICO_TRACE=1`: boot, catalog the SD card, load a TAP, save a TAP. Keep them as fixtures.
+- [x] Build fuse-tspico on the desktop and confirm the TS-Pico works against `pico_host`. **This is the reference implementation.** (2026-10-30: `fuse_smoke.py` 6/6; `docs/NOTES.md`.)
+- [x] Record **reference traces** with `TSPICO_TRACE=1`: boot, catalog the SD card, load a TAP, save a TAP. Keep them as fixtures. (2026-10-30: `test/traces/`; SAVE recorded in ZEsarUX, since Fuse's debugger can't press SAVE's key.)
 
 **Gate 0:** both reference systems work, and the trace fixtures exist.
 

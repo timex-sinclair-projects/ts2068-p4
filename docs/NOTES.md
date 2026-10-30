@@ -94,3 +94,22 @@ What the REPL reports:
 **CPU clock: 360 MHz, not 400.** ESP-IDF v5.5.2's `components/esp_system/port/soc/esp32p4/Kconfig.cpu` makes 360 MHz the default when `ESP32P4_SELECTS_REV_LESS_V3` is set, and offers the 360 MHz option only for those chips. 400 MHz is still selectable in Kconfig, but whether revision 1.3 silicon is rated for it needs Espressif's datasheet or errata, not a guess. Until that's settled, **Phase 2's speed budget assumes 360 MHz**, 10% less than PLAN.md assumed.
 
 **For Phase 1:** `_thread` is GIL-based, so the firmware's threads and the REPL all share core 1 time. Which core MicroPython's task and its threads are pinned to is still to be read from `ports/esp32` (`MP_TASK_COREID`, and how `mp_thread_create` pins).
+
+## Reference build: fuse-tspico + pico_host (2026-10-30)
+
+Built from the pinned submodules, outside the repo, in `~/esp/ref`:
+
+- `~/esp/ref/libspectrum`: clone of `third_party/libspectrum` at `2d95bbd`, `./configure --prefix=~/esp/ref/prefix`.
+- `~/esp/ref/fuse-tspico`: clone of `third_party/fuse-tspico` at `tspico-v1.10.0-1`, `./configure --with-null-ui --with-audio-driver=null --enable-automation` with `PKG_CONFIG_PATH=~/esp/ref/prefix/lib/pkgconfig`. Reports Fuse 1.10.0.
+
+Checks, all passing:
+
+- fuse-tspico's own `tspico/bridge_test.py` (stand-in bridge, stock ROMs): 5/5.
+- firmware `tools/emu/fuse_smoke.py` with the real firmware: 6/6 (boot, HELLO, CAT, mount, LOAD CODE, VERIFY).
+- firmware `tools/emu/smoke.py` in ZEsarUX: 13/13 (adds SAVE, tpi:info, printer, tpi:cd menu).
+
+Gotcha: at firmware `v2.3.1`, `src/assets/*.tap` are generated, not committed. Run `firmware/tools/build-basic.sh` (needs `zmakebas`) before either smoke test, or `fuse_smoke.py` fails on the missing `src/assets`. The outputs are git-ignored, so the submodule stays clean.
+
+The ROM at `v2.3.1` is `src/rom/TSPICO-23.ROM`, not the `TSPICO-21.ROM` PLAN.md §2 names. Phase 3's ROM split should use whichever the pinned firmware carries.
+
+Traces are in `test/traces/` (see its README).
