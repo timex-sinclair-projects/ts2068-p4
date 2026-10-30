@@ -28,6 +28,18 @@ static QueueHandle_t rxq;       // uint16_t: v, or PORT_0F | v
 static QueueHandle_t txq;       // uint8_t
 static volatile uint32_t y;     // the status byte the Z80 reads on 0Fh (low 8 bits)
 static volatile uint32_t n_frames, n_underruns, n_rx_overruns;
+static volatile bool fw_waiting;  // the firmware is blocked waiting for a Z80 write
+// Words pushed by the Z80 side and taken by the firmware, and n_taken when the
+// current wait began. fw_waiting stays true for a moment after a word wakes
+// the firmware (core 1 has to be scheduled and clear it); a wait only says
+// "finished with everything" if it began after every push was taken.
+static volatile uint32_t n_pushed, n_taken, wait_mark;
+
+static inline void wait_begin(void) {
+    wait_mark = n_taken;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    fw_waiting = true;
+}
 
 bool p4bridge_init(void) {
     if (rxq == NULL) {
@@ -48,7 +60,9 @@ uint8_t p4bridge_frame(uint8_t op, uint8_t value) {
             // Auto-busy: every Z80 write drops READY. Before the push, so the
             // firmware on core 1 can't set READY first and have it lost.
             y = 0;
-            if (xQueueSend(rxq, &w, 0) != pdTRUE) {
+            if (xQueueSend(rxq, &w, 0) == pdTRUE) {
+                n_pushed++;
+            } else {
                 n_rx_overruns++;
             }
             return 0;
@@ -73,6 +87,18 @@ void p4bridge_get_stats(p4bridge_stats_t *out) {
     out->frames = n_frames;
     out->underruns = n_underruns;
     out->rx_overruns = n_rx_overruns;
+}
+
+bool p4bridge_firmware_waiting(void) {
+    if (!fw_waiting) {
+        return false;
+    }
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    return wait_mark == n_pushed;
+}
+
+unsigned p4bridge_rx_waiting(void) {
+    return rxq ? uxQueueMessagesWaiting(rxq) : 0;
 }
 
 static void check_init(void) {
@@ -100,9 +126,12 @@ static mp_obj_t mq_get(mp_obj_t self_in) {
     uint16_t w;
     for (;;) {
         MP_THREAD_GIL_EXIT();
+        wait_begin();
         BaseType_t ok = xQueueReceive(rxq, &w, pdMS_TO_TICKS(10));
+        fw_waiting = false;
         MP_THREAD_GIL_ENTER();
         if (ok == pdTRUE) {
+            n_taken++;
             return MP_OBJ_NEW_SMALL_INT(w);
         }
         mp_handle_pending(true);
@@ -149,7 +178,9 @@ static mp_obj_t mq_rx_fifo(mp_obj_t self_in) {
     if (n == 0) {
         uint16_t w;
         MP_THREAD_GIL_EXIT();
+        wait_begin();
         xQueuePeek(rxq, &w, 1);
+        fw_waiting = false;
         MP_THREAD_GIL_ENTER();
         n = uxQueueMessagesWaiting(rxq);
     }
@@ -211,6 +242,7 @@ static MP_DEFINE_CONST_FUN_OBJ_2(mq_exec_obj, mq_exec);
 static mp_obj_t mq_reset_fifos(mp_obj_t self_in) {
     xQueueReset(rxq);
     xQueueReset(txq);
+    n_taken = n_pushed;             // the dropped words count as taken
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mq_reset_fifos_obj, mq_reset_fifos);

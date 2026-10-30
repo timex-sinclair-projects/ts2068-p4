@@ -200,19 +200,19 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 **Gate 0:** both reference systems work, and the trace fixtures exist.
 
 ### Phase 1: Prove the two-runtime design (main risk, Q1)
-- [ ] Choose the integration approach and record it in `docs/DECISIONS.md`:
+- [x] Choose the integration approach and record it in `docs/DECISIONS.md`: (A, 2026-10-30: D4.)
   - **A.** Build inside MicroPython's ESP32 port, with the emulator as a native C module (USER_C_MODULES) whose task is pinned to the other core.
   - **B.** Embed MicroPython (the `ports/embed` approach) inside an ESP-IDF application that owns `app_main`.
   - Start with A. Switch to B if A blocks core pinning or memory placement.
-- [ ] Write `p4bridge`, a native module with two FreeRTOS queues:
+- [x] Write `p4bridge`, a native module with two FreeRTOS queues: (`tspico/p4bridge`.)
   - C side: `bridge_frame(op, value) -> reply`, which blocks the calling task until the reply arrives.
   - Python side: the calls `BusModel` needs.
-- [ ] Port `BusModel` from `pico_host.py` to MicroPython on top of `p4bridge`, keeping its semantics exactly (9-bit RX words, busy flag after every write, 4-deep TX, empty TX reads 00h after a timeout). Use temporary stand-ins for `rp2` and `tsbus`, with `pico_host.micropython_env()` as the checklist.
-- [ ] Install `src/TS`, `config.ini`, `words.txt` and the assets; start `TS.tspico.TS2068_IO()` on its thread.
-- [ ] Write a C test driver that replays the Phase 0 traces through `bridge_frame()` and compares the replies.
+- [x] (In C instead, D4.) Port `BusModel` from `pico_host.py` to MicroPython on top of `p4bridge`, keeping its semantics exactly (9-bit RX words, busy flag after every write, 4-deep TX, empty TX reads 00h after a timeout). Use temporary stand-ins for `rp2` and `tsbus`, with `pico_host.micropython_env()` as the checklist.
+- [x] (`tools/p4/install.py`, `tspico/py/p4host.py`.) Install `src/TS`, `config.ini`, `words.txt` and the assets; start `TS.tspico.TS2068_IO()` on its thread.
+- [x] Write a C test driver that replays the Phase 0 traces through `bridge_frame()` and compares the replies. (`tspico/p4bridge/replay.c`, run by `tspico/py/p4replay.py`.)
 - [ ] **Firmware upstream:** draft the platform-layer change (§1.3) from what the prototype actually needed. Open it as a firmware PR.
 
-**Gate 1:** the traces replay with matching replies on the P4, using the microSD card. If this fails: put the firmware on a separate RP2040/RP2350 attached by UART or SPI. That's real hardware, which the TS-Pico team already builds.
+**Gate 1 (met 2026-10-30, `docs/NOTES.md`):** the traces replay with matching replies on the P4, using the microSD card. If this fails: put the firmware on a separate RP2040/RP2350 attached by UART or SPI. That's real hardware, which the TS-Pico team already builds.
 
 ### Phase 2: Choose the Z80 core and lift the machine (Q2, Q6)
 - [ ] Lift Fuse's TS2068 machine, SCLD and paging behind the `machine_*` API. Compile it for the host first, then the P4. Record every extra file it pulls in (Q6).

@@ -7,6 +7,21 @@
 // IN (0Fh) line means "poll until the status reads this", the way the ROM's
 // polling loop would; other lines are one access each. Replies are checked
 // for IN (0Eh) and HELLO; writes have no reply to check.
+//
+// Pacing: the trace has no times, and the replay sends frames back to back,
+// far faster than a Z80 at 3.5 MHz with the ROM between accesses. So a
+// non-zero status (READY and friends) only counts once the firmware has
+// taken every Z80 write: a READY that lands while writes are still queued
+// answers something older (the end of the previous command), and taking it
+// would run the replay ahead of the firmware. A status of 00h (BUSY) needs
+// no such wait.
+//
+// And before every Z80 write, the replay waits (up to WRITE_WAIT_US) until
+// the firmware is blocked waiting for one: on the real bus the Z80 is slow
+// enough that the Pico always gets back to its next wait first. Without it,
+// a SYNC could land while the firmware is still in the tail of the previous
+// command, whose closing READY the replay then takes as the SYNC's answer
+// (seen on the board: "Pre-header: 0Fh write: 031 103").
 
 #include <string.h>
 
@@ -25,6 +40,7 @@
 #define REPLAY_PRIORITY 5
 #define REPLAY_STACK 4096
 #define STATUS_TIMEOUT_US 10000000      // a status that never comes: 10 s
+#define WRITE_WAIT_US 3000000         // the firmware busy elsewhere: write anyway after 3 s
 #define MAX_BAD 8
 
 enum { IDLE, RUNNING, DONE };
@@ -42,6 +58,8 @@ static struct {
     uint32_t mismatches;
     uint32_t status_timeouts;
     uint32_t status_polls;
+    uint32_t write_wait_timeouts;   // writes sent without the firmware waiting
+    uint64_t write_wait_us;         // total time writes waited for it
     uint32_t in_data;               // IN (0Eh) frames
     uint64_t in_data_us;            // their total time
     uint32_t in_data_max_us;
@@ -68,7 +86,7 @@ static void replay_task(void *arg) {
             for (;;) {
                 got = p4bridge_frame(op, 0);
                 r.status_polls++;
-                if (got == expected) {
+                if (got == expected && (expected == 0 || p4bridge_rx_waiting() == 0)) {
                     break;
                 }
                 if (esp_timer_get_time() > deadline) {
@@ -79,6 +97,17 @@ static void replay_task(void *arg) {
                 esp_rom_delay_us(2);    // about a Z80 polling loop's pace
             }
         } else {
+            if (op == P4B_OUT_DATA || op == P4B_OUT_STATUS) {
+                int64_t w0 = esp_timer_get_time();
+                while (!p4bridge_firmware_waiting()) {
+                    if (esp_timer_get_time() - w0 > WRITE_WAIT_US) {
+                        r.write_wait_timeouts++;
+                        break;
+                    }
+                    esp_rom_delay_us(2);
+                }
+                r.write_wait_us += esp_timer_get_time() - w0;
+            }
             int64_t t0 = esp_timer_get_time();
             uint8_t got = p4bridge_frame(op, value);
             if (op == P4B_IN_DATA) {
@@ -151,6 +180,8 @@ static mp_obj_t replay_status(void) {
     new_dict_item(d, MP_QSTR_mismatches, mp_obj_new_int_from_uint(r.mismatches));
     new_dict_item(d, MP_QSTR_status_timeouts, mp_obj_new_int_from_uint(r.status_timeouts));
     new_dict_item(d, MP_QSTR_status_polls, mp_obj_new_int_from_uint(r.status_polls));
+    new_dict_item(d, MP_QSTR_write_wait_timeouts, mp_obj_new_int_from_uint(r.write_wait_timeouts));
+    new_dict_item(d, MP_QSTR_write_wait_us, mp_obj_new_int_from_ull(r.write_wait_us));
     new_dict_item(d, MP_QSTR_in_data, mp_obj_new_int_from_uint(r.in_data));
     new_dict_item(d, MP_QSTR_in_data_us, mp_obj_new_int_from_ull(r.in_data_us));
     new_dict_item(d, MP_QSTR_in_data_max_us, mp_obj_new_int_from_uint(r.in_data_max_us));

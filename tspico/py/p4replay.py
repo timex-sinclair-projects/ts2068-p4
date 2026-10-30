@@ -55,6 +55,8 @@ def report(s):
               % (s["in_data"], s["in_data_us"] / s["in_data"], s["in_data_max_us"]))
     print("[p4replay] status polls %d, status timeouts %d, underruns %d, rx overruns %d"
           % (s["status_polls"], s["status_timeouts"], s["underruns"], s["rx_overruns"]))
+    print("[p4replay] writes waited %.2f s for the firmware, %d timed out"
+          % (s["write_wait_us"] / 1e6, s["write_wait_timeouts"]))
     print("[p4replay] mismatches: %d" % s["mismatches"])
     for i, op, v, exp, got in s["bad"]:
         print("[p4replay]   frame %d: %s %02X expected %02X got %02X" % (i, OPS[op], v, exp, got))

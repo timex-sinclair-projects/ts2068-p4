@@ -276,6 +276,11 @@ def start(telemetry=True):
     """The firmware's main loop on a thread (core 1, like everything Python).
     Returns at once; the REPL stays usable."""
     _load_settings()
+    # Power-on: p4bridge's queues and Y are C statics and survive a soft
+    # reset, so a previous run's READY and queued bytes would still be there.
+    mq = p4bridge.MQ()
+    mq.reset_fifos()
+    mq.exec("mov(y, null)")
     fw = install()
     fw.TLM_ENABLED = telemetry
     _thread.stack_size(32 * 1024)

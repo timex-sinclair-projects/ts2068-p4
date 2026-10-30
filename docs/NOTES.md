@@ -131,3 +131,21 @@ Checked from the REPL: HELLO → 1; Y reads 00 after an `OUT`; RX words 0x55 and
 **The firmware on the P4:** `tools/p4/install.py` puts the pinned firmware (`TS/*.mpy` from mpy-cross), its files, and `tspico/py` on the flash. `p4host.start()` imports it under the stand-ins in **0.6 s** and it reaches its main loop (READY, boot pre-load queued) in **5.3 s**, 2 s of which is five failed SD attempts with no card in. Telemetry matches pico_host's (`LOAD_CONFIG enter: build=58ccbcd (HEAD)`, `ACTIVATE_MQ exit: SM active, Y=BUSY`).
 
 **Trace extraction bug, fixed:** pico_host prints frames and telemetry from two threads, so a telemetry line can be glued onto a frame line. A line-based grep left junk on one line of each `.frames` file (no frames were lost). Now extracted with a regex over the whole log (test/traces/README.md).
+
+## Gate 1: the traces replay on the P4 (2026-10-30)
+
+Both Phase 0 traces replay with every reply matching, through `p4bridge` on core 0 against the unmodified firmware on core 1, with the board's microSD card (reseeded by `seed_sd.run()` before each run: the traces write to the card).
+
+| Trace | Frames | Telemetry off | Telemetry on | IN 0Eh | Underruns |
+|---|---|---|---|---|---|
+| fuse-smoke | 2486 | 0.44–0.53 s | 0.90 s | mean 23 µs, max 1.2 ms | 0 |
+| zesarux-smoke | 2192 | 1.17–1.19 s | 2.37 s | mean 19 µs, max 3.1 ms | 0 |
+
+Each was run at least three times, telemetry on and off, with no mismatches, status timeouts or RX overruns. The real Z80 sessions took far longer; the replay runs as fast as the firmware answers.
+
+**Pacing rules.** A trace has no timestamps, so `replay.c` has to know when the real Z80 would have waited. It needs two rules:
+
+- **Status polls:** an `IN 0Fh` is retried until it reads what the trace has. For a non-zero value, the firmware must also have taken every Z80 write so far (10 s limit).
+- **Before every Z80 write** (`OUT 0Eh`/`0Fh`), the firmware must be blocked waiting for one, in `MQ.get()` or an empty `MQ.rx_fifo()`, **and that wait must have begun after it took every earlier write** (3 s limit). The second half matters. The firmware's "waiting" flag stays set for a few µs after a word wakes it, until core 1 runs. Without the second half, the replay sent an LPRINT character's SYNC while the firmware was still inside `PRINT_IO` for the last one. `PRINT_IO`'s closing READY then landed after the SYNC's BUSY, and the next pre-header was captured as `103 42 05 …`. The firmware took that for a non-printer command, flushed the printer to the card mid-printout, and ended in RECOVERED (FB). `p4bridge` now counts pushes and takes, so a wait only counts if it began with nothing queued.
+
+A real Z80 never needs either rule: BASIC takes milliseconds between LPRINT characters, and the ROM waits for READY. But an emulator that runs ahead of real time between bus accesses could hit the same stale READY. Phase 3 should keep the emulator in real time around port 0Eh/0Fh, or check this again.

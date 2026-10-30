@@ -35,3 +35,11 @@ typedef struct {
 } p4bridge_stats_t;
 
 void p4bridge_get_stats(p4bridge_stats_t *out);
+
+// The firmware is blocked in MQ.get() or an empty MQ.rx_fifo(), waiting for
+// the Z80 to write, and that wait began after it took every earlier write:
+// it has finished whatever it was doing.
+bool p4bridge_firmware_waiting(void);
+
+// Z80 writes queued that the firmware hasn't taken yet.
+unsigned p4bridge_rx_waiting(void);
