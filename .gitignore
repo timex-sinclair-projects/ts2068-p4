@@ -18,3 +18,5 @@ dependencies.lock
 
 # Flash dumps (large, board-specific)
 /backups/
+test/z80/coretest
+test/z80/tests.out

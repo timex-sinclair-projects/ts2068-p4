@@ -21,7 +21,10 @@ One row per file copied into `machine/`, `z80/` or `tspico/`. Note any local cha
 
 | Our path | Source submodule | Source path | Source commit | Local changes |
 |---|---|---|---|---|
-| _none yet_ | | | | |
+| `z80/z80.h`, `z80/z80_macros.h`, `z80/z80.c`, `z80/z80_ops.c` | `third_party/fuse-tspico` | `z80/` (same names) | `a43958d` | Fuse's hooks replaced by `z80/z80_glue.h`; see `z80/README.md` |
+| `z80/opcodes_base.c`, `z80/z80_cb.c`, `z80/z80_ddfd.c`, `z80/z80_ddfdcb.c`, `z80/z80_ed.c` | `third_party/fuse-tspico` | generated: `z80/z80.pl` + `z80/opcodes_*.dat` | `a43958d` | None (generated output) |
+| `test/z80/coretest.c` | `third_party/fuse-tspico` | `z80/coretest.c` | `a43958d` | Dummies for Fuse's peripherals removed; provides `z80_glue.h`'s event and /INT names |
+| `test/z80/tests.in`, `test/z80/tests.expected` | `third_party/fuse-tspico` | `z80/tests/` | `a43958d` | None |
 
 ## Not used
 

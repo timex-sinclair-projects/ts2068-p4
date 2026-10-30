@@ -149,3 +149,52 @@ Each was run at least three times, telemetry on and off, with no mismatches, sta
 - **Before every Z80 write** (`OUT 0Eh`/`0Fh`), the firmware must be blocked waiting for one, in `MQ.get()` or an empty `MQ.rx_fifo()`, **and that wait must have begun after it took every earlier write** (3 s limit). The second half matters. The firmware's "waiting" flag stays set for a few µs after a word wakes it, until core 1 runs. Without the second half, the replay sent an LPRINT character's SYNC while the firmware was still inside `PRINT_IO` for the last one. `PRINT_IO`'s closing READY then landed after the SYNC's BUSY, and the next pre-header was captured as `103 42 05 …`. The firmware took that for a non-printer command, flushed the printer to the card mid-printout, and ended in RECOVERED (FB). `p4bridge` now counts pushes and takes, so a wait only counts if it began with nothing queued.
 
 A real Z80 never needs either rule: BASIC takes milliseconds between LPRINT characters, and the ROM waits for READY. But an emulator that runs ahead of real time between bus accesses could hit the same stale READY. Phase 3 should keep the emulator in real time around port 0Eh/0Fh, or check this again.
+
+## Phase 2 progress (2026-10-30)
+
+**Fuse's Z80 core is lifted and passes Fuse's core tester on the host** (`make -C test/z80 check`: 1,356 tests, every register, T-state and bus access). What changed from Fuse is in `z80/README.md`. The core now reaches the rest of the emulator only through `z80/z80_glue.h`.
+
+**What the TS2068 machine pulls in from Fuse (Q6, read 2026-10-30, not built yet).** Beyond the files PLAN.md §2 lists:
+
+- **Memory and machine:** `memory_pages.c` (817 lines, 2K pages, the `contended` flag; it also uses glib and hooks for Opus, Spectranet, TTX2000S, uSpeech and the debugger) and `spectrum.c` (`RAM[65][0x4000]` is 1,040 KB, but the TS2068 uses pages 0, 2 and 5; the frame event). From `machine.c`, only the timings, `line_times` and the contention-table fill.
+- **Ports and ULA:**
+  - `ula.c`: port FE, the beeper, `ula_contention[80000]` plus a no-MREQ table, 160 KB together.
+  - `periph.c`: port lookup through a GSList.
+  - `machines_periph.c`: the AY on F5/F6, with joysticks on R14 through A8/A9.
+  - `tc2048.c`: `tc2048_port_from_ula`.
+- **Display:**
+  - Files: `display.c`, `display_dirty.c` (444 lines), `display_render.c` (356), `display_border.c` (226), `rectangle.c`.
+  - Calls into our code: `uidisplay_plot8` and `uidisplay_plot16` (512 hi-res) on a 640×480 canvas.
+- **Sound:**
+  - Files: `ay.c`, `sound/ay_engine.c` (335), `blipbuffer.c` (623), `output_mixer.c` (343) and its four filters (about 310).
+  - `sound.c`'s init and low-level parts need replacing with our own. `psg.c` isn't needed (PSG recording only).
+- **To replace, not lift:**
+  - `periph.c`: a switch on the low byte.
+  - `event.c`: a fixed array.
+  - `module.c` and the startup manager: explicit reset calls.
+  - `settings`: a small struct.
+  - stubs for the UI, debugger, RZX, the tape and SLT traps, `dck.c` and the memory pool.
+  - libspectrum's generated header: `compat/libspectrum.h`.
+- **Machine wiring:**
+  - Ports: `scld.h`'s bitfields depend on `WORDS_BIGENDIAN` (both targets are little-endian). Port FE is fully decoded (`0x00ff`/`0x00fe`); F4 and FF go to the SCLD.
+  - EXROM: loaded with allowed sizes 8K and 16K; the TS-Pico uses 16K.
+  - Timing: 3,528,000 Hz CPU, AY at CPU/2, 224 × 262 = 58,688 T-states a frame, interrupt length 32, top-left pixel at T-state 9169.
+- **DOCK/EXROM contention (PLAN.md §3):** `scld_set_exrom_dock_contention` is at `peripherals/scld.c:391-401`. Callers: `machines/tc2068.c:190` (TS2068 and TC2068 reset), `scld.c:278` (snapshot), `dck.c:195` and `:301`, and `spec_se.c:161`. HOME RAM 5 is contended by `memory_ram_set_16k_contention(5,1)` in `ts2068.c:91`.
+
+**Q7, from reading the code: Fuse follows the beam in 8×1-pixel chunks.**
+
+- `display_update_critical` copies the region up to the beam position (from `tstates` and `line_times`) before a write lands at or after it.
+- `scld_dec_write` forces that on a mode change.
+- Border changes are logged by beam position.
+- Each chunk is drawn with the RAM and the port FF value at copy time (`display_render.c:58-128`).
+
+**Z80_JLS (ESPectrum) as the other candidate, read 2026-10-30.**
+
+- **What fits:** memory goes through replaceable function pointers, with contention charged on each access, so a page-keyed TS2068 hook fits without core changes.
+- **What would change:**
+  - I/O calls `Ports::` directly in 32 places.
+  - The clock only advances inside `VIDEO::Draw`, and HALT signals the frame loop with `CPU::stFrame = 0`.
+  - The LOAD and SAVE ROM traps assume Spectrum addresses and would misfire on the TS2068 ROM.
+- **The cost:** the core is all-static C++.
+- **Effort:** about 1–2 days to extract.
+- **Testing:** MEMPTR, Q and the undocumented flags are implemented, but the repo has no test results, so it needs `test/z80`'s suite.
