@@ -69,3 +69,28 @@ esptool --port /dev/cu.wchusbserial10 --baud 230400 write-flash 0 backups/crowpa
 ```
 
 **Serial speed limit:** the CH340 link fails at 460800 and 921600 baud ("Corrupt data, expected 0x1000 bytes"), on every attempt. 230400 is reliable. Use `--baud 230400` (or `-b 230400` with `idf.py`) for all flashing; a full 16 MB read takes about 13 minutes. Reads were done in 1 MB chunks with retries, so one glitch costs one chunk.
+
+## Stock MicroPython on the board (2026-10-30)
+
+MicroPython **v1.29.0**, board `ESP32_GENERIC_P4`, variant `PRE_REV3_C6_WIFI`, built in `~/esp/micropython/ports/esp32` with ESP-IDF v5.5.2. App image 1,772,016 bytes (259,600 bytes left in its partition). Flashed after `erase-flash`, at 230400 baud:
+
+```bash
+esptool --chip esp32p4 --port /dev/cu.wchusbserial10 --baud 230400 write-flash --flash-mode dio --flash-size 16MB --flash-freq 40m \
+  0x2000 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0x10000 micropython.bin
+```
+
+Boot log: `ESP-ROM:esp32p4-eco2-20240710`, then the banner `MicroPython v1.29.0 on 2026-10-30; Generic ESP32P4 module with pre revision 3 chip and ESP32C6 hosted WIFI with ESP32-P4`. The REPL answers on the CH340 port at 115200.
+
+What the REPL reports:
+
+| | |
+|---|---|
+| `machine.freq()` | **360,000,000** (see below) |
+| `sys.implementation._thread` | `'GIL'`: `_thread` works, threads share one GIL |
+| GC heap | 64,000 bytes at start, growing into PSRAM: `gc.mem_free()` 33,090,208 |
+| Partitions | `nvs` 24K at 0x9000, `phy_init` 4K at 0xf000, `vfs` 14 MB at 0x200000 |
+| Filesystem `/` | 3,584 × 4K blocks, 3,581 free |
+
+**CPU clock: 360 MHz, not 400.** ESP-IDF v5.5.2's `components/esp_system/port/soc/esp32p4/Kconfig.cpu` makes 360 MHz the default when `ESP32P4_SELECTS_REV_LESS_V3` is set, and offers the 360 MHz option only for those chips. 400 MHz is still selectable in Kconfig, but whether revision 1.3 silicon is rated for it needs Espressif's datasheet or errata, not a guess. Until that's settled, **Phase 2's speed budget assumes 360 MHz**, 10% less than PLAN.md assumed.
+
+**For Phase 1:** `_thread` is GIL-based, so the firmware's threads and the REPL all share core 1 time. Which core MicroPython's task and its threads are pinned to is still to be read from `ports/esp32` (`MP_TASK_COREID`, and how `mp_thread_create` pins).

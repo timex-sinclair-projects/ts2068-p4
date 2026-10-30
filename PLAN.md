@@ -89,7 +89,7 @@ The two emulators agreeing therefore isn't evidence: they share an origin. The S
 ### Target board: CrowPanel Advanced 7" ESP32-P4 (checked 2026-10-10)
 | Item | Value |
 |---|---|
-| SoC | ESP32-P4NRW32: dual-core RISC-V up to 400 MHz (HP), plus a single-core LP core up to 40 MHz. **Chip revision v1.3** on our board (esptool, 2026-10-30): pre-revision 3, so MicroPython's `PRE_REV3` variants and `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` |
+| SoC | ESP32-P4NRW32: dual-core RISC-V up to 400 MHz (HP), plus a single-core LP core up to 40 MHz. **Chip revision v1.3** on our board (esptool, 2026-10-30): pre-revision 3, so MicroPython's `PRE_REV3` variants and `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y`. ESP-IDF defaults these chips to **360 MHz**, and stock MicroPython runs at 360 MHz on it |
 | USB | One USB-C to a CH340 (`1A86:7522`) on the P4 UART, for flashing; one USB-C to the P4's high-speed OTG port (checked 2026-10-30) |
 | Memory | 32 MB PSRAM, 16 MB flash, 768 KB HP L2MEM |
 | Display | 7" IPS 1024×600, MIPI-DSI, capacitive touch up to 5 points |
@@ -151,7 +151,7 @@ Sources: Elecrow wiki, CNX Software (Oct 2025), OpenELAB listing, atomic14 board
 | # | Question | Blocks | How to check |
 |---|---|---|---|
 | Q1 | Can one ESP-IDF image run MicroPython on one core and native C on the other? | Everything | Phase 1 |
-| Q2 | Which Z80 core runs the TS2068 at full speed on a 400 MHz P4 core, and with how much headroom? | Phase 3 | Phase 2 |
+| Q2 | Which Z80 core runs the TS2068 at full speed on a P4 core at 360 MHz (the pre-rev3 default on our board; 400 MHz unconfirmed for rev 1.3), and with how much headroom? | Phase 3 | Phase 2 |
 | Q3 | Can either USB-C port act as a USB host for a keyboard? | Keyboard choice | Schematic, Elecrow wiki, test |
 | Q4 | Does a BLE HID keyboard work through the C6 (esp-hosted)? | Keyboard choice | esp-hosted docs, test |
 | Q5 | Does the firmware use `machine.SDCard` or its own SD driver (`TS.sdcard`)? | Phase 4 SD mapping | Read `src/TS/sdcard.py` and its callers |
@@ -193,7 +193,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
   /test            trace fixtures, Z80 test suites, BASIC test programs
   ```
 - [ ] Install the ESP-IDF version that MicroPython's P4 port requires. Read it from `ports/esp32/README.md`; don't guess. (Read 2026-10-30: v1.29.0 recommends ESP-IDF v5.5.2; see `docs/DECISIONS.md` D3. Chip revision is v1.3, so the variant is `PRE_REV3_C6_WIFI`: `docs/NOTES.md`.)
-- [ ] Build the stock `ESP32_GENERIC_P4` MicroPython and flash it to the board to confirm the REPL works.
+- [x] Build the stock `ESP32_GENERIC_P4` MicroPython and flash it to the board to confirm the REPL works. (2026-10-30: v1.29.0 `PRE_REV3_C6_WIFI`; `docs/NOTES.md`.)
 - [ ] Build fuse-tspico on the desktop and confirm the TS-Pico works against `pico_host`. **This is the reference implementation.**
 - [ ] Record **reference traces** with `TSPICO_TRACE=1`: boot, catalog the SD card, load a TAP, save a TAP. Keep them as fixtures.
 
