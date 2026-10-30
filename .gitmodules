@@ -1,0 +1,12 @@
+[submodule "firmware"]
+	path = firmware
+	url = https://github.com/timex-sinclair-projects/tspico-firmware-build.git
+[submodule "third_party/fuse-tspico"]
+	path = third_party/fuse-tspico
+	url = https://github.com/timex-sinclair-projects/fuse-tspico.git
+[submodule "third_party/ZX-ESPectrum-IDF"]
+	path = third_party/ZX-ESPectrum-IDF
+	url = https://github.com/EremusOne/ZX-ESPectrum-IDF.git
+[submodule "third_party/libspectrum"]
+	path = third_party/libspectrum
+	url = https://git.code.sf.net/p/fuse-emulator/libspectrum

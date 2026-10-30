@@ -1,0 +1,17 @@
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Host builds
+/host-build/
+*.o
+*.a
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+.codegraph/
