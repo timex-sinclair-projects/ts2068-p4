@@ -210,7 +210,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 - [x] (In C instead, D4.) Port `BusModel` from `pico_host.py` to MicroPython on top of `p4bridge`, keeping its semantics exactly (9-bit RX words, busy flag after every write, 4-deep TX, empty TX reads 00h after a timeout). Use temporary stand-ins for `rp2` and `tsbus`, with `pico_host.micropython_env()` as the checklist.
 - [x] (`tools/p4/install.py`, `tspico/py/p4host.py`.) Install `src/TS`, `config.ini`, `words.txt` and the assets; start `TS.tspico.TS2068_IO()` on its thread.
 - [x] Write a C test driver that replays the Phase 0 traces through `bridge_frame()` and compares the replies. (`tspico/p4bridge/replay.c`, run by `tspico/py/p4replay.py`.)
-- [ ] **Firmware upstream:** draft the platform-layer change (§1.3) from what the prototype actually needed. Open it as a firmware PR.
+- [ ] **Firmware upstream:** draft the platform-layer change (§1.3) from what the prototype actually needed. Open it as a firmware PR. (Drafted 2026-10-30: `docs/upstream/p4-board-proposal.md`, a third board in the existing board layer. Not yet sent upstream.)
 
 **Gate 1 (met 2026-10-30, `docs/NOTES.md`):** the traces replay with matching replies on the P4, using the microSD card. If this fails: put the firmware on a separate RP2040/RP2350 attached by UART or SPI. That's real hardware, which the TS-Pico team already builds.
 
