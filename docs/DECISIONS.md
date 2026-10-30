@@ -32,6 +32,6 @@ What was decided, why, and what was ruled out (PLAN.md §5). Newest last.
 | v1.28.0 | v5.5.1 | v5.3, v5.4, v5.4.1, v5.4.2 |
 | v1.29.0 | v5.5.2 | v5.3, v5.4, v5.4.1, v5.4.2, v5.5.1, v5.5.4 |
 
-**Board variant:** `ESP32_GENERIC_P4`, a C6 Wi-Fi variant. Which one depends on the chip revision, still to be confirmed on the board (NOTES.md, "Chip revision").
+**Board variant:** `ESP32_GENERIC_P4`, variant **`PRE_REV3_C6_WIFI`**. Our board's chip is revision v1.3, read with esptool on 2026-10-30 (NOTES.md, "Chip revision").
 
 **Open until:** the stock build runs a REPL on the board (Phase 0).

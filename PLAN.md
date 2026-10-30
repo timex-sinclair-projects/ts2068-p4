@@ -89,7 +89,8 @@ The two emulators agreeing therefore isn't evidence: they share an origin. The S
 ### Target board: CrowPanel Advanced 7" ESP32-P4 (checked 2026-10-10)
 | Item | Value |
 |---|---|
-| SoC | ESP32-P4NRW32: dual-core RISC-V up to 400 MHz (HP), plus a single-core LP core up to 40 MHz |
+| SoC | ESP32-P4NRW32: dual-core RISC-V up to 400 MHz (HP), plus a single-core LP core up to 40 MHz. **Chip revision v1.3** on our board (esptool, 2026-10-30): pre-revision 3, so MicroPython's `PRE_REV3` variants and `CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y` |
+| USB | One USB-C to a CH340 (`1A86:7522`) on the P4 UART, for flashing; one USB-C to the P4's high-speed OTG port (checked 2026-10-30) |
 | Memory | 32 MB PSRAM, 16 MB flash, 768 KB HP L2MEM |
 | Display | 7" IPS 1024×600, MIPI-DSI, capacitive touch up to 5 points |
 | Radio | ESP32-C6-MINI-1 co-processor (Wi-Fi 6, BT 5.3/BLE). The P4 has no radio of its own. |
@@ -191,7 +192,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
   /docs            DECISIONS.md, NOTES.md
   /test            trace fixtures, Z80 test suites, BASIC test programs
   ```
-- [ ] Install the ESP-IDF version that MicroPython's P4 port requires. Read it from `ports/esp32/README.md`; don't guess. (Read 2026-10-30: v1.29.0 recommends ESP-IDF v5.5.2; see `docs/DECISIONS.md` D3. Confirm the chip revision first: `docs/NOTES.md`.)
+- [ ] Install the ESP-IDF version that MicroPython's P4 port requires. Read it from `ports/esp32/README.md`; don't guess. (Read 2026-10-30: v1.29.0 recommends ESP-IDF v5.5.2; see `docs/DECISIONS.md` D3. Chip revision is v1.3, so the variant is `PRE_REV3_C6_WIFI`: `docs/NOTES.md`.)
 - [ ] Build the stock `ESP32_GENERIC_P4` MicroPython and flash it to the board to confirm the REPL works.
 - [ ] Build fuse-tspico on the desktop and confirm the TS-Pico works against `pico_host`. **This is the reference implementation.**
 - [ ] Record **reference traces** with `TSPICO_TRACE=1`: boot, catalog the SD card, load a TAP, save a TAP. Keep them as fixtures.

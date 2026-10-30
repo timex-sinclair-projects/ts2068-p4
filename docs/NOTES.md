@@ -4,11 +4,33 @@ Working notes: findings, measurements and things to check. Settled facts move to
 
 ---
 
-## Chip revision (2026-10-30, unverified)
+## Chip revision: v1.3, pre-revision 3 (verified 2026-10-30)
 
-MicroPython's `ESP32_GENERIC_P4/board.md` (v1.29.0) says the P4 changed substantially at chip revision 3.0, and that Espressif marks revision 3+ parts with an **X** suffix (`ESP32-P4NRW32X`). PLAN.md §2 lists this board's SoC as `ESP32-P4NRW32`, with no X, which would make it a revision 0.x/1.x chip that needs the `PRE_REV3_C6_WIFI` variant.
+MicroPython's `ESP32_GENERIC_P4/board.md` (v1.29.0) says the P4 changed substantially at chip revision 3.0, and that Espressif marks revision 3+ parts with an **X** suffix (`ESP32-P4NRW32X`).
 
-The part number in PLAN.md came from listings and reviews, so it may not show the suffix. **Check on the board:** `esptool.py --chip esp32p4 chip_id` (or the boot log's `chip revision: vX.Y`). Then choose `C6_WIFI` (rev 3+) or `PRE_REV3_C6_WIFI` (rev < 3), and set `CONFIG_ESP32P4_REV_MIN` to match in our own sdkconfig.
+`esptool flash-id` on our board, over the UART port:
+
+```
+Chip type:          ESP32-P4 (revision v1.3)
+Features:           Dual Core + LP Core, 400MHz
+Crystal frequency:  40MHz
+Flash:              manufacturer ba, device 4018, 16MB
+```
+
+So this board needs the **`PRE_REV3_C6_WIFI`** variant. Our own sdkconfig must carry the same settings as MicroPython's `boards/sdkconfig.p4_pre_rev3`:
+
+```
+CONFIG_ESP32P4_REV_MIN_300=n
+CONFIG_ESP32P4_REV_MIN_0=y
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+```
+
+Other CrowPanel Advanced 7" units may ship with revision 3 chips. Firmware built this way runs on revision 0.x/1.x only; a rev 3 board needs the plain `C6_WIFI` variant and its own build.
+
+## USB ports on the board (2026-10-30)
+
+- **One USB-C port** goes to a WCH CH340 USB-serial chip (USB ID `1A86:7522`). This is the flashing and console port, wired to the P4's UART with auto-reset (esptool resets it into download mode via RTS/DTR). macOS 26 has no built-in driver for this CH340 model: install WCH's `CH34xVCPDriver` and approve its driver extension. The port then shows as `/dev/cu.wchusbserial10`.
+- **The other USB-C port** goes to the P4's high-speed USB OTG port (480 Mbps link). The factory demo enumerates there as `303A:4004` "Advance-P4" by "Elecrow", with a single HID interface ("Elecrow HID interface") and no serial interface. That port is the one that could act as a USB host for a keyboard (Q3); whether it supplies VBUS to a device is still to be checked on the schematic.
 
 ## Local checkouts that already exist (2026-10-30)
 
