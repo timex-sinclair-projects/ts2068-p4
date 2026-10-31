@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TS2068 on ESP32-P4: install</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+  :root {
+    --bg: #f7f5f0; --fg: #1d1d1b; --muted: #5d5b55; --rule: #d9d5ca;
+    --accent: #c8102e; --accent-fg: #fff; --card: #fff; --code: #efece4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --fg: #ecebe6; --muted: #a3a097; --rule: #34332f;
+      --accent: #ff4d5e; --accent-fg: #161614; --card: #1f1f1c; --code: #2a2a26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+  .stripes { display: flex; height: 8px; margin-bottom: 28px; }
+  .stripes span { flex: 1; }
+  .stripes span:nth-child(1) { background: #c8102e; }
+  .stripes span:nth-child(2) { background: #f39c12; }
+  .stripes span:nth-child(3) { background: #f1c40f; }
+  .stripes span:nth-child(4) { background: #27ae60; }
+  .stripes span:nth-child(5) { background: #2980b9; }
+  h1 { font-size: 2rem; line-height: 1.15; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  img { width: 100%; height: auto; border-radius: 6px; display: block; margin: 0 0 28px; }
+  .card {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 22px 22px 24px; margin: 0 0 28px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 1.2rem; }
+  ol { margin: 0; padding-left: 1.3em; }
+  li { margin: 0 0 10px; }
+  li:last-child { margin: 0; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  a { color: var(--accent); }
+  .button-row { margin: 18px 0 6px; }
+  esp-web-install-button button[slot="activate"],
+  .download {
+    display: inline-block; font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: var(--accent-fg); border: 0;
+    border-radius: 6px; padding: 11px 20px; text-decoration: none;
+  }
+  .download { background: transparent; color: var(--accent); border: 2px solid var(--accent); padding: 9px 18px; }
+  .note { color: var(--muted); font-size: 0.93rem; margin: 10px 0 0; }
+  footer { color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--rule); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="stripes"><span></span><span></span><span></span><span></span><span></span></div>
+  <h1>A Timex/Sinclair 2068 on the ESP32-P4</h1>
+  <p class="sub">With a TS-Pico, on the Elecrow CrowPanel Advanced 7". Version {{VERSION}}.</p>
+
+  <img src="ts2068-p4.jpg" alt="The TS2068 emulator on the CrowPanel, running the TS-Pico ROM, with the side menu" width="1600" height="1062">
+
+  <div class="card">
+    <h2>1. Install the firmware</h2>
+    <ol>
+      <li>Plug the panel's <strong>UART</strong> USB-C port into this computer.</li>
+      <li>Press <strong>Install</strong> and choose the port: a CH340, <code>wchusbserial</code> or <code>USB Serial</code>.</li>
+      <li>It writes MicroPython, the emulator, the TS-Pico firmware and the menu, replacing what's on the board. About two minutes.</li>
+      <li>When it says the installation is complete, <strong>reset the panel</strong>: press its reset button, or unplug it and plug it back in. It stays in the installer's mode until then.</li>
+    </ol>
+    <div class="button-row">
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate">Install</button>
+        <span slot="unsupported">This browser can't reach a serial port. Use Chrome or Edge on a computer.</span>
+        <span slot="not-allowed">The page needs to be opened over https.</span>
+      </esp-web-install-button>
+    </div>
+    <p class="note">Want Elecrow's demo back later? Save it first: <code>esptool --chip esp32p4 read-flash 0 0x1000000 crowpanel-factory.bin</code>. A paired Bluetooth keyboard needs pairing again after installing.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Make the microSD card</h2>
+    <ol>
+      <li>Download the card files and unzip them onto a FAT32 microSD card.</li>
+      <li>Put the card in the panel and press reset. The TS2068 starts with the TS-Pico ROM.</li>
+    </ol>
+    <div class="button-row">
+      <a class="download" href="{{CARD_URL}}">Download the card ({{CARD_NAME}})</a>
+    </div>
+    <p class="note">It holds the TS2068's ROMs (Timex's software is in the public domain), the TS-Pico ROM (MIT) and the TS-Pico's card files.</p>
+  </div>
+
+  <footer>
+    <a href="https://github.com/timex-sinclair-projects/ts2068-p4">Source, and installing with esptool</a> ·
+    <a href="{{RELEASE_URL}}">Release notes</a> ·
+    Installer by <a href="https://esphome.github.io/esp-web-tools/">ESP Web Tools</a>
+  </footer>
+</main>
+</body>
+</html>

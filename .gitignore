@@ -32,3 +32,4 @@ test/machine/szx_resave
 test/basic/q10probe.bin
 test/basic/q10probe-code.tap
 dist/
+_site/

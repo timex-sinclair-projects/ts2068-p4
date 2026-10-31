@@ -16,7 +16,8 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 | `machine/` | TS2068 machine, SCLD, paging and sound, lifted from Fuse (`machine.cmake`) |
 | `z80/` | Fuse's Z80 core (`z80.cmake`); `z80_jls/` is the one not chosen |
 | `tspico/` | `p4bridge` queues, and the Python that runs the firmware on the P4 |
-| `tools/` | `p4/`: install, card setup, sessions, the release downloads (`make_release.py`); `host/`: comparisons against Fuse |
+| `tools/` | `p4/`: install, card setup, sessions, the release downloads (`make_release.py`) and the web installer (`web_site.py`); `host/`: comparisons against Fuse |
+| `web/` | The web installer's page (ESP Web Tools), put on GitHub Pages with a release's image by `.github/workflows/pages.yml` |
 | `firmware/` | Submodule: tspico-firmware-build (pinned) |
 | `third_party/` | Read-only reference submodules; see [PROVENANCE.md](third_party/PROVENANCE.md) |
 | `docs/` | [DECISIONS.md](docs/DECISIONS.md), [NOTES.md](docs/NOTES.md) |
@@ -24,7 +25,9 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 
 ## Installing without building
 
-Each [release](https://github.com/timex-sinclair-projects/ts2068-p4/releases) has two downloads:
+The easiest way: the **[web installer](https://timex-sinclair-projects.github.io/ts2068-p4/)**. Plug in the panel, press Install in Chrome or Edge, and reset the panel when it's done (the installer leaves it in download mode). The card files are on the same page.
+
+Or by hand: each [release](https://github.com/timex-sinclair-projects/ts2068-p4/releases) has two downloads:
 
 - **`ts2068-p4-VERSION.zip`** holds `ts2068-p4-VERSION.bin`, the board's whole 16 MB flash: MicroPython with the emulator, the TS-Pico firmware, and the menu.
 - **`ts2068-p4-sd-VERSION.zip`** is the microSD card: the ROMs (the TS2068's own, and the TS-Pico's, which it starts with), and the TS-Pico's card files.
