@@ -19,9 +19,9 @@
 # /p4/btkbd.json. Pairing is Secure Connections "Just Works", with no
 # passkey: MicroPython v1.29 never passes NimBLE's passkey request to
 # Python on a connection it made (extmod/nimble/modbluetooth_nimble.c,
-# peripheral_gap_event_cb), so a keyboard that wants one waits until the
-# pairing times out. Without one, nothing guards against someone in range
-# listening in while it pairs.
+# peripheral_gap_event_cb; micropython/micropython#17805), so a keyboard
+# that wants one waits until the pairing times out. Without one, nothing
+# guards against someone in range listening in while it pairs.
 
 import binascii
 import json

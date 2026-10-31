@@ -32,6 +32,7 @@ import ts2068
 ROWS = 10
 CHARS = 40                              # ts2068.osd keeps this many
 PLAIN, INVERSE, BUTTON = 0, 1, 2
+SMALL = 16                              # added: the small size in tall rows
 LIST_ROWS = 7                           # rows 1-7 of a list page
 _VOLUME = "Vol\t-\t%d\t+"                # tab stops: - at x 92, + at 184
 
@@ -49,7 +50,7 @@ def _row(r, text, style=PLAIN):
 def _say(text):
     global _status
     _status = text
-    _row(ROWS - 1, text)
+    _row(ROWS - 1, text, PLAIN + SMALL)
 
 
 def _main():

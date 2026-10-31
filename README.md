@@ -39,8 +39,17 @@ python3 tools/p4/install.py
 python3 tools/p4/sd_roms.py
 ```
 
-At power-on `main.py` starts the TS2068 from the card's `/TS2068` folder, with the TS-Pico firmware plugged in when the ROM is the 32K TS-Pico one, and puts the menu in the side panel above the on-screen keyboard. To boot to the REPL instead, create `/p4/noboot` on the flash.
+At power-on `main.py` starts the TS2068 from the card's `/TS2068` folder, with the TS-Pico firmware plugged in when the ROM is the 32K TS-Pico one, and puts the menu in the side panel above the on-screen keyboard (or in the whole side panel while a Bluetooth keyboard is connected). To boot to the REPL instead, create `/p4/noboot` on the flash.
+
+It needs MicroPython v1.29.0 and ESP-IDF v5.5.2 (docs/DECISIONS.md D3).
+
+**A Bluetooth keyboard:** tap **Keyboard → Pair a keyboard** in the menu with the keyboard in pairing mode. It's remembered, and reconnects at power-on when a key is pressed. The keys type what they say; Ctrl or Alt is SYMBOL SHIFT, Esc is BREAK, Tab is extended mode. BLE keyboards only: the C6 has no Bluetooth Classic. Pairing has no passkey for now (docs/DECISIONS.md D8).
 
 ## License
 
-To be set in Phase 2: GPL-2.0-or-later if Fuse's Z80 core is chosen, GPL-3.0 if Z80_JLS is (PLAN.md §2, "Licensing outcome").
+GPL-2.0-or-later (`LICENSE`), since Fuse's Z80 core was chosen (docs/DECISIONS.md D5). Lifted code keeps its own header and attribution (`third_party/PROVENANCE.md`):
+
+- `machine/`, `z80/`: from Fuse and fuse-tspico, GPL-2.0-or-later.
+- `z80_jls/`: ESPectrum's Z80_JLS, **GPL-3.0**. Nothing links it by default; a build made with it (`TS2068_CORE=jls`) is GPL-3.0 as a whole.
+- The TS-Pico firmware (`firmware`, a submodule) and MicroPython: MIT.
+- `platform/p4_osd_font.h`: Aileron Regular, CC0 1.0.

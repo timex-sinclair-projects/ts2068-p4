@@ -238,7 +238,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 - [x] **ROMs:** split `TSPICO-21.ROM` into 16K HOME and 16K EXROM. *2026-10-31: `emu.py` splits a 32K ROM file as it loads it, HOME first; the pinned firmware has `TSPICO-23.ROM`.*
 - [x] **OSD:** a side-panel menu and file browser, following ESPectrum's OSD as the model. *2026-10-31: `platform/p4_osd.c` draws text rows and reports taps above the keyboard; `usermods/ts2068/osd.py` has the menu: ROMs and snapshots from the card, save snapshot, reset, volume (docs/NOTES.md, Phase 3). While a Bluetooth keyboard is connected the on-screen one is hidden and the menu fills the side panel, with 60-line rows.*
 
-**Gate 3:** the TS2068 boots to BASIC with display, sound and keyboard, and a test program runs at full speed.
+**Gate 3 (met 2026-10-31, docs/NOTES.md Phase 3):** the TS2068 boots to BASIC with display, sound and keyboard, and a test program runs at full speed.
 
 ### Phase 4: Connect the TS-Pico
 - [x] Port Fuse's `tspico.c` hook into `/tspico`, calling `p4bridge` in place of sockets. *2026-10-31: `machine/ts2068.c` already had the port hook; `ts2068.run(..., tspico=True)` points it at `p4bridge_frame()`, and `emu.start()` does that for a 32K TS-Pico ROM, starting the firmware first. `LOAD ""` works on the panel (docs/NOTES.md, Phase 4). Emulated time pauses while the firmware answers, about 250 ms over a load.*

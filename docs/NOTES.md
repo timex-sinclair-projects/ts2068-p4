@@ -431,6 +431,14 @@ DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS
 
 **A proportional typeface for the menu (2026-10-31).** The menu's rows are now drawn in Aileron Regular (CC0, the font Pillow ships), anti-aliased, 16 pixels in the short rows and 24 in the tall, instead of the ROM's font doubled; the on-screen keys keep the ROM's. `tools/host/make_osd_font.py` writes `platform/p4_osd_font.h` (ASCII 32-126, 4-bit coverage: 3.8 KB and 8.0 KB). Each glyph is blended between the row's background and ink through a 16-entry table. A tab moves to the next multiple of 46 pixels (a fifth of the 230), so controls line up: `Vol - 10 +` and `< Back Up Down`; "Volume" at 24 pixels pushed the + past the edge. `ts2068.osd_tap()` now gives the x of a tap in pixels, not a column. Text past the right edge is cut off: a long status line, such as "Connecting to Keys-To-Go 2" (309 pixels at 24), loses its end in the tall rows. Checked on the panel by the user.
 
+**Gate 3 (2026-10-31).** On the panel with the TS-Pico ROM, display, sound and the Bluetooth keyboard: `10 FOR i=1 TO 30000: PRINT AT 0,0;i: NEXT i`, typed through the key matrix and RUN, keeps FRAMES (23672) going up 60.10 times a wall-clock second, the panel's rate, which the I2S clock paces. The emulator takes 5.2 ms of the 16.6 ms frame (5.7 at most), with no late frames or underruns over 10 s.
+
+**Still to do, not blocking (2026-10-31):**
+
+- **esp-hosted 2.7.0 against the C6's 2.12:** MicroPython v1.29 pins `espressif/esp_hosted` 2.7.0 and `esp_wifi_remote` 0.15.2 together in `ports/esp32/main/idf_component.yml`, so upgrading means changing MicroPython's tree. The link, BLE and Wi-Fi work; the boot log's version warning is advice. Left as it is.
+- **The display's worst case:** every line changed every frame takes 11.6 ms beside the emulator's ~5, close to the 16.6 ms frame, with no late frames measured. Bound by the PPA's writes to PSRAM.
+- **Passkeys:** micropython/micropython#17805 is this bug, open, unanswered; a comment with the cause and the fix is posted there (2026-10-31; text in `docs/upstream/micropython-17805-comment.md`), offering a PR.
+
 ## Phase 4 progress (2026-10-31)
 
 **The TS-Pico is plugged into the running machine.** `emu.start()` with a 32K ROM (the TS-Pico's, `TSPICO-23.ROM`) now starts the firmware (`p4host.start()`, the first time only; READY in 2.7 s) and runs the machine with `ts2068.run(..., tspico=True)`, the sixth argument. That points `machine/ts2068.c`'s existing port hook (`config->tspico`, ports 0Eh/0Fh) at `p4bridge_frame()`, so the Z80 on core 0 talks to the firmware on core 1 through the same queues Gate 1 replayed traces through. Fuse's `tspico.c` needed no porting: its socket and HELLO are the parts in-process doesn't need. `"tspico": false` in `settings.json` leaves it unplugged.

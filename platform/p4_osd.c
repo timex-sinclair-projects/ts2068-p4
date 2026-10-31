@@ -115,10 +115,12 @@ shades( uint16_t bg, uint16_t ink, uint16_t out[ 16 ] )
 static void
 draw_row( uint16_t *fb, int r, const char *text, int style, int h )
 {
+  const p4_osd_font_t *font = h > ROW_H_SHORT && !( style & P4_OSD_SMALL ) ?
+                              &font_large : &font_small;
+  style &= ~P4_OSD_SMALL;
   uint16_t bg = style == P4_OSD_INVERSE ? COLOUR_WHITE :
                 style == P4_OSD_BUTTON ? COLOUR_GREY : COLOUR_BLACK;
   uint16_t ink = style == P4_OSD_INVERSE ? COLOUR_BLACK : COLOUR_WHITE;
-  const p4_osd_font_t *font = h > ROW_H_SHORT ? &font_large : &font_small;
   int y0 = r * h;
   int gap = h / 12;                     /* black below a button: 2 or 5 lines */
   int top = y0 + ( h - gap - font->height ) / 2;

@@ -545,7 +545,8 @@ static mp_obj_t keys(size_t n_args, const mp_obj_t *args) {
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(keys_obj, 0, 1, keys);
 
 // osd(row, text, style=0): a row of the side panel's menu area; style 0
-// plain, 1 inverse, 2 a button (platform/p4_osd.h)
+// plain, 1 inverse, 2 a button, plus 16 for the small size in tall rows
+// (platform/p4_osd.h)
 static mp_obj_t osd(size_t n_args, const mp_obj_t *args) {
     p4_osd_text(mp_obj_get_int(args[0]), mp_obj_str_get_str(args[1]),
         n_args > 2 ? mp_obj_get_int(args[2]) : P4_OSD_PLAIN);

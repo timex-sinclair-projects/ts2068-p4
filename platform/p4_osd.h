@@ -28,6 +28,10 @@ enum {
   P4_OSD_BUTTON,                /* white on grey, like a key */
 };
 
+/* Added to a style: the small size even in tall rows, for a line that
+   would run past the edge (the status line) */
+#define P4_OSD_SMALL 0x10
+
 /* Rows already set are kept, and drawn again into every frame buffer */
 void p4_osd_init( void );
 
