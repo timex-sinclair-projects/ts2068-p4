@@ -221,7 +221,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
   - Fuse's core: generate its opcode files on the host.
   - ESPectrum's Z80_JLS: strip its ESPectrum-specific hooks.
 - [ ] Host check: boot the TS2068 ROM on both cores and compare against fuse-tspico (screen and memory after N frames). *Fuse's core: matches, 2026-10-30 (registers and screen; Fuse can't dump memory). Z80_JLS: not yet.*
-- [ ] Accuracy: run a Z80 instruction-exerciser suite on both cores (zexdoc/zexall, or Fuse's `coretest`).
+- [ ] Accuracy: run a Z80 instruction-exerciser suite on both cores (zexdoc/zexall, or Fuse's `coretest`). *Fuse's core: coretest 1,356/1,356, zexdoc and zexall 67/67 each (2026-10-30). Z80_JLS: not yet.*
 - [ ] P4 benchmark: a fixed BASIC loop, frame timing with no display. Keep Z80-visible RAM and hot tables in L2MEM. *Fuse's core: 2.5 ms a frame, 15% of the budget (2026-10-30, `tools/p4/bench_ts2068.py`). Z80_JLS: not yet.*
 - [ ] Record the decision, with the numbers, in `docs/DECISIONS.md`.
 

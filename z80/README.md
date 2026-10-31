@@ -4,6 +4,8 @@ Fuse's Z80 core, lifted from `third_party/fuse-tspico/z80` (tag `tspico-v1.10.0-
 
 **Checked:** Fuse's own core tester (`test/z80`, `make -C test/z80 check`) passes all 1,356 tests in `tests.in`. That's every register, T-state and memory and port access, including contention. Both builds pass: `HAVE_ENOUGH_MEMORY` (prefixed opcodes inlined in one switch) and without it (one function per prefix).
 
+Frank Cringle's exercisers pass too (`make -C test/z80 zex`, 2026-10-30): zexdoc and zexall, 67 of 67 tests each, documented and undocumented flags. That's 46.7 billion T-states, about 32 s each on the Mac. `test/z80/zexrun.c` runs them as CP/M programs.
+
 ## Files
 
 | File | From | Changes |

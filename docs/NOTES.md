@@ -244,3 +244,12 @@ With `fuse_dock_contention` set, ours matches Fuse's column exactly. On a real T
 
 Gate 2 isn't met yet: zexdoc/zexall and the Z80_JLS comparison are still to do. On these numbers Fuse's core has ample headroom, and a tie goes to it.
 
+**zexdoc and zexall pass on Fuse's core (2026-10-30).**
+
+- **The programs:** Frank Cringle's exercisers, from agn453/ZEXALL at `319f7f9` (GPL-2.0, as extracted from YAZE-AG 2.51.3), are in `test/z80/zex/`.
+- **The runner:** `test/z80/zexrun.c` runs a `.com` on the lifted core in a flat 64K, with no contention. CP/M's BDOS (functions 2 and 9) and its warm boot are trapped through OUT instructions at 0x0005 and 0x0000.
+- **Result:** both pass 67 of 67, so zexall's undocumented flags are right too. Each runs 46.7 billion T-states, about 32 s on the Mac.
+- **Check on the runner:** with one bit of the first expected CRC flipped in a scratch copy, it reports `ERROR` for that test.
+
+With coretest, the 2.5 ms P4 frame and the Fuse comparisons, Fuse's core now meets every Gate 2 condition. What's left in Phase 2 is the comparison the plan asks for: Z80_JLS behind the same interface, then the decision in `docs/DECISIONS.md`.
+

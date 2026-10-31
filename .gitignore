@@ -22,3 +22,4 @@ test/z80/coretest
 test/z80/tests.out
 test/machine/run_ts2068
 test/basic/*.rom
+test/z80/zexrun
