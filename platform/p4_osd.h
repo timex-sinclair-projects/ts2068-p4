@@ -1,8 +1,9 @@
 /* p4_osd.h: the side panel's menu area, above the on-screen keyboard
    (PLAN.md Phase 3, "OSD").
 
-   The top 240 lines of the side panel as P4_OSD_ROWS rows of P4_OSD_COLS
-   characters, drawn in the ROM's character set at twice its size. What
+   The top 240 lines of the side panel, or all of it while the keyboard is
+   hidden, as P4_OSD_ROWS rows of P4_OSD_COLS characters, drawn in the
+   ROM's character set at twice its size. What
    the rows say, and what a tap does, is up to the caller (osd.py): this
    only draws text and reports taps. Text may be set from another core
    while the display draws; a row changed mid-draw is drawn again the next
@@ -31,6 +32,11 @@ void p4_osd_init( const uint8_t *font );
 /* Row 0 to P4_OSD_ROWS - 1: up to P4_OSD_COLS characters (more are cut
    off, fewer padded with spaces) in a style */
 void p4_osd_text( int row, const char *text, int style );
+
+/* Tall rows (1) fill the side panel's whole height, 60 lines each, for
+   when the keyboard is hidden (p4_keyboard_show); short ones (0, the
+   default) fill the 240 lines above it. Every row is drawn again. */
+void p4_osd_tall( int tall );
 
 /* Note a finger landing in the menu area (one that wasn't down there the
    frame before) as a tap. Called each frame with all the touches. */

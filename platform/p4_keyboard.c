@@ -43,6 +43,9 @@ static bool ready;
 static uint64_t down;
 static uint64_t held[ P4_DISPLAY_BUFFERS ];   /* the keys each buffer shows down */
 static uint8_t drawn;                         /* buffers with the keyboard in */
+static volatile bool shown_on = true;
+static volatile uint32_t layout = 1;          /* bumped when shown or hidden */
+static uint32_t laid[ P4_DISPLAY_BUFFERS ];   /* the layout each buffer has */
 
 void
 p4_keyboard_init( const uint8_t *f )
@@ -50,7 +53,18 @@ p4_keyboard_init( const uint8_t *f )
   memcpy( font, f, sizeof( font ) );
   down = 0;
   drawn = 0;
+  layout++;
   ready = true;
+}
+
+void
+p4_keyboard_show( int show )
+{
+  bool on = show != 0;
+  if( on == shown_on ) return;
+  shown_on = on;
+  __sync_synchronize();
+  layout++;
 }
 
 static void
@@ -70,7 +84,7 @@ void
 p4_keyboard_touch( const p4_touch_point_t *points, int count, uint8_t rows[8] )
 {
   uint64_t d = 0;
-  for( int i = 0; i < count; i++ ) {
+  for( int i = 0; i < count && shown_on; i++ ) {
     int x = points[i].x - KB_X, y = points[i].y - KB_Y;
     if( x < 0 || y < 0 || x >= COLS * PITCH_X || y >= ROWS * PITCH_Y ) continue;
     d |= 1ULL << ( y / PITCH_Y * COLS + x / PITCH_X );
@@ -155,7 +169,21 @@ p4_keyboard_draw( uint16_t *fb, int buffer, int shown )
 {
   if( !ready ) return 0;
   uint8_t bit = 1 << buffer;
+  uint32_t l = layout;
+  if( laid[ buffer ] != l ) {
+    laid[ buffer ] = l;
+    drawn &= ~bit;
+  }
+  if( !shown_on ) {
+    /* the menu has the panel: p4_osd_draw paints over this buffer */
+    return 0;
+  }
   if( !( drawn & bit ) ) {
+    /* black first: the gaps between keys may hold the tall menu */
+    for( int y = KB_Y; y < P4_DISPLAY_HEIGHT; y++ ) {
+      uint16_t *p = fb + y * P4_DISPLAY_WIDTH + KB_X;
+      for( int x = 0; x < COLS * PITCH_X; x++ ) p[x] = 0;
+    }
     for( int key = 0; key < KEYS; key++ ) draw_key( fb, key, down >> key & 1 );
     sync_lines( fb, KB_Y, ROWS * PITCH_Y );
     drawn |= bit;
@@ -169,5 +197,5 @@ p4_keyboard_draw( uint16_t *fb, int buffer, int shown )
     }
     held[ buffer ] = down;
   }
-  return !( drawn & ( 1 << shown ) ) || held[ shown ] != down;
+  return laid[ shown ] != l || !( drawn & ( 1 << shown ) ) || held[ shown ] != down;
 }

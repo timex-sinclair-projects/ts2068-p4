@@ -6,6 +6,7 @@
 #   btkbd.pair()         # look for a keyboard for 20 s, pair, and save it
 #   btkbd.forget()       # drop the saved keyboard
 #   btkbd.status()       # -> a line for the menu
+#   btkbd.connected()    # -> True while a keyboard is sending keys
 #
 # The C6's Bluetooth controller is turned on through esp-hosted (the hosted
 # module), then MicroPython's bluetooth module runs NimBLE on the P4. A
@@ -65,6 +66,7 @@ _failed = None
 _conf = {}                  # "addr_type", "addr" (hex), "name", "secrets"
 _secrets = {}               # (type, key) -> value
 _conn = None
+_ready = False              # subscribed: the keyboard's keys reach us
 _pairing = False
 _found = {}                 # scanning: addr -> (addr_type, name)
 _status = "Bluetooth off"
@@ -76,6 +78,10 @@ _inputs = set()             # value handles whose notifications are keys
 
 def status():
     return _status
+
+
+def connected():
+    return _ready
 
 
 def _say(text):
@@ -155,9 +161,11 @@ def _connect():
 
 def _next():
     """Run the next GATT step, or report the keyboard ready"""
+    global _ready
     if _todo:
         _todo.pop(0)()
     else:
+        _ready = True
         _say("Keyboard: " + _conf.get("name", "connected"))
 
 
@@ -201,7 +209,7 @@ def _keys(data):
 
 
 def _irq(event, data):
-    global _conn, _svc, _pairing
+    global _conn, _svc, _pairing, _ready
     if event == _IRQ_SCAN_RESULT:
         addr_type, addr, adv_type, rssi, adv = data
         fields = _adv_fields(adv)
@@ -233,6 +241,7 @@ def _irq(event, data):
         _release()
         if conn == _conn:
             _conn = None
+            _ready = False
             _inputs.clear()
         if _conf.get("addr") and not _pairing:
             _connect()                  # the keyboard may wake again

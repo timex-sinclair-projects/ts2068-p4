@@ -17,7 +17,8 @@
 #
 # A list page shows seven names at a time, with Back, up and down. The
 # bottom row is the status line; the keyboard's progress shows there as it
-# changes.
+# changes. While a Bluetooth keyboard is connected the on-screen one is
+# hidden, and the rows grow to fill the side panel (ts2068.side_keyboard).
 
 import os
 import time
@@ -183,10 +184,14 @@ def _tap_list(row, col):
 
 def _loop():
     kbd = btkbd.status()
+    tall = False
     while True:
         if btkbd.status() != kbd:
             kbd = btkbd.status()
             _say(kbd)
+        if btkbd.connected() != tall:
+            tall = btkbd.connected()
+            ts2068.side_keyboard(not tall)
         tap = ts2068.osd_tap()
         if tap:
             try:

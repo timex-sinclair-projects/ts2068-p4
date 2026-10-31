@@ -14,8 +14,8 @@
 
 #define AREA_X  ( P4_DISPLAY_WIDTH - 2 - 380 )  /* lined up with the keyboard */
 #define AREA_W  380
-#define ROW_H   24
-#define AREA_H  ( P4_OSD_ROWS * ROW_H )
+#define ROW_H_SHORT 24                          /* above the keyboard */
+#define ROW_H_TALL  ( P4_DISPLAY_HEIGHT / P4_OSD_ROWS )  /* the whole panel */
 #define GLYPH_W 6                               /* the font's columns 1-6 */
 #define SCALE   2
 #define CHAR_W  ( GLYPH_W * SCALE )
@@ -35,6 +35,7 @@ static struct {
 static uint32_t held[ P4_DISPLAY_BUFFERS ][ P4_OSD_ROWS ];
 static bool was_down;
 static volatile int tap_row = -1, tap_col;
+static volatile int row_h = ROW_H_SHORT;
 
 void
 p4_osd_init( const uint8_t *f )
@@ -62,17 +63,28 @@ p4_osd_text( int row, const char *text, int style )
 }
 
 void
+p4_osd_tall( int tall )
+{
+  int h = tall ? ROW_H_TALL : ROW_H_SHORT;
+  if( h == row_h ) return;
+  row_h = h;
+  __sync_synchronize();                 /* the height before the versions */
+  for( int r = 0; r < P4_OSD_ROWS; r++ ) rows[r].version++;
+}
+
+void
 p4_osd_touch( const p4_touch_point_t *points, int count )
 {
   bool down = false;
+  int h = row_h;
   for( int i = 0; i < count; i++ ) {
     int x = points[i].x - AREA_X, y = points[i].y;
-    if( x < 0 || x >= AREA_W || y >= AREA_H ) continue;
+    if( x < 0 || x >= AREA_W || y >= P4_OSD_ROWS * h ) continue;
     if( !was_down ) {
       int col = ( points[i].x - TEXT_X ) / CHAR_W;
       tap_col = col < 0 ? 0 : col >= P4_OSD_COLS ? P4_OSD_COLS - 1 : col;
       __sync_synchronize();
-      tap_row = y / ROW_H;
+      tap_row = y / h;
     }
     down = true;
   }
@@ -92,17 +104,19 @@ p4_osd_tap( int *row, int *col )
 }
 
 static void
-draw_row( uint16_t *fb, int r, const char *text, int style )
+draw_row( uint16_t *fb, int r, const char *text, int style, int h )
 {
   uint16_t bg = style == P4_OSD_INVERSE ? COLOUR_WHITE :
                 style == P4_OSD_BUTTON ? COLOUR_GREY : COLOUR_BLACK;
   uint16_t ink = style == P4_OSD_INVERSE ? COLOUR_BLACK : COLOUR_WHITE;
-  int y0 = r * ROW_H;
+  int y0 = r * h;
+  int gap = h / 12;                     /* black below a button: 2 or 5 lines */
+  int text_y = y0 + ( h - gap - 8 * SCALE ) / 2;
 
-  for( int y = 0; y < ROW_H; y++ ) {
+  for( int y = 0; y < h; y++ ) {
     uint16_t *p = fb + ( y0 + y ) * P4_DISPLAY_WIDTH + AREA_X;
-    /* a button keeps a line of black below it, so buttons stay apart */
-    uint16_t c = style == P4_OSD_BUTTON && y >= ROW_H - 2 ? COLOUR_BLACK : bg;
+    /* a button keeps lines of black below it, so buttons stay apart */
+    uint16_t c = style == P4_OSD_BUTTON && y >= h - gap ? COLOUR_BLACK : bg;
     for( int x = 0; x < AREA_W; x++ ) p[x] = c;
   }
   for( int i = 0; i < P4_OSD_COLS; i++ ) {
@@ -111,14 +125,14 @@ draw_row( uint16_t *fb, int r, const char *text, int style )
     const uint8_t *g = font + ( ch - ' ' ) * 8;
     for( int row = 0; row < 8 * SCALE; row++ ) {
       uint8_t bits = g[ row / SCALE ];
-      uint16_t *p = fb + ( y0 + 4 + row ) * P4_DISPLAY_WIDTH + TEXT_X + i * CHAR_W;
+      uint16_t *p = fb + ( text_y + row ) * P4_DISPLAY_WIDTH + TEXT_X + i * CHAR_W;
       for( int col = 0; col < CHAR_W; col++ ) {
         if( bits & ( 0x40 >> ( col / SCALE ) ) ) p[col] = ink;
       }
     }
   }
   esp_cache_msync( fb + y0 * P4_DISPLAY_WIDTH + AREA_X,
-                   ( ( ROW_H - 1 ) * P4_DISPLAY_WIDTH + AREA_W ) * 2,
+                   ( ( h - 1 ) * P4_DISPLAY_WIDTH + AREA_W ) * 2,
                    ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED );
 }
 
@@ -128,6 +142,7 @@ p4_osd_draw( uint16_t *fb, int buffer, int shown )
   int differs = 0;
 
   if( !ready ) return 0;
+  int h = row_h;
   for( int r = 0; r < P4_OSD_ROWS; r++ ) {
     uint32_t v = rows[r].version;
     if( held[ buffer ][ r ] != v ) {
@@ -135,7 +150,7 @@ p4_osd_draw( uint16_t *fb, int buffer, int shown )
       __sync_synchronize();
       memcpy( text, rows[r].text, P4_OSD_COLS );
       int style = rows[r].style;
-      draw_row( fb, r, text, style );
+      draw_row( fb, r, text, style, h );
       /* changed while copied: leave it stale, to draw again next frame */
       held[ buffer ][ r ] = rows[r].version == v ? v : 0;
     }

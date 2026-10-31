@@ -553,6 +553,20 @@ static mp_obj_t osd(size_t n_args, const mp_obj_t *args) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(osd_obj, 2, 3, osd);
 
+// side_keyboard(on): the on-screen keyboard shown (True) or hidden, for
+// a physical one. Hidden, the menu's rows grow to fill the side panel.
+static mp_obj_t side_keyboard(mp_obj_t on_in) {
+    if (mp_obj_is_true(on_in)) {
+        p4_osd_tall(0);                 // short rows first, then the keys
+        p4_keyboard_show(1);
+    } else {
+        p4_keyboard_show(0);            // keys gone first, then tall rows
+        p4_osd_tall(1);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(side_keyboard_obj, side_keyboard);
+
 // osd_tap() -> (row, column) of the last tap in the menu area not yet
 // taken, or None
 static mp_obj_t osd_tap(void) {
@@ -686,6 +700,7 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_pico_trace), MP_ROM_PTR(&pico_trace_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd), MP_ROM_PTR(&osd_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd_tap), MP_ROM_PTR(&osd_tap_obj) },
+    { MP_ROM_QSTR(MP_QSTR_side_keyboard), MP_ROM_PTR(&side_keyboard_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_display_check), MP_ROM_PTR(&display_check_obj) },
 };

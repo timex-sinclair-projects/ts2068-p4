@@ -23,6 +23,12 @@ void p4_keyboard_init( const uint8_t *font );
 void p4_keyboard_touch( const p4_touch_point_t *points, int count,
                         uint8_t rows[8] );
 
+/* Show the keyboard (1, the default) or hide it (0), for a physical
+   keyboard. Hidden, it draws nothing and no touch presses a key; the menu
+   takes the whole side panel (p4_osd_tall). Shown again, it's drawn
+   whole into each buffer. */
+void p4_keyboard_show( int show );
+
 /* The keys down, bit row * 10 + column, top left first */
 uint64_t p4_keyboard_down( void );
 
