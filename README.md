@@ -22,7 +22,7 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 ## Getting the source
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules https://github.com/timex-sinclair-projects/ts2068-p4.git
 ```
 
 ## Running it
