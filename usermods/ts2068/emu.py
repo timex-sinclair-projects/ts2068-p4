@@ -10,6 +10,7 @@
 #   emu.save_snapshot("game")        # the running machine -> SNAPS/game.szx
 #   emu.load_snapshot("game")        # starts the machine first if need be
 #   emu.snapshots()                  # -> the files in SNAPS/
+#   emu.update_firmware()            # TS/ on the card -> /TS, if it's new
 #
 # On the card:
 #
@@ -17,6 +18,9 @@
 #   /TS2068/ROMS/           ROM files
 #   /TS2068/SNAPS/          SZX snapshots (ts2068.snapshot); Fuse's load
 #                           too, if they need no DOCK cartridge
+#   /TS2068/TS/             a TS-Pico firmware update: a copy of src/TS
+#                           (.py or .mpy), installed the next time the
+#                           firmware starts
 #
 # rom names a file in ROMS/: a 16K HOME ROM, with exrom naming its 8K or
 # 16K EXROM, or a 32K file holding both, HOME first (as TSPICO-23.ROM
@@ -177,13 +181,76 @@ def start(**overrides):
     return s
 
 
+def _rmtree(path):
+    try:
+        names = os.listdir(path)
+    except OSError:
+        return
+    for n in names:
+        p = path + "/" + n
+        if os.stat(p)[0] & 0x4000:
+            _rmtree(p)
+        else:
+            os.remove(p)
+    os.rmdir(path)
+
+
+def update_firmware():
+    """A firmware update from the card: if /TS2068/TS holds .py or .mpy
+    files that aren't what was last installed from there, they replace the
+    flash's /TS (the old one kept as /TS.old). True if it updated. The card
+    copy is checked by a hash of its names and contents, kept in
+    /TS/.card. .py files load more slowly than .mpy, which must come from
+    an mpy-cross of the same MicroPython."""
+    import hashlib
+    import binascii
+    src = DIR + "/TS"
+    with _Card():
+        try:
+            names = sorted(n for n in os.listdir(src)
+                           if n.endswith(".py") or n.endswith(".mpy"))
+        except OSError:
+            return False
+        if not names:
+            return False
+        h = hashlib.sha256()
+        for n in names:
+            h.update(n + "\0")
+            with open(src + "/" + n, "rb") as f:
+                h.update(f.read())
+        digest = binascii.hexlify(h.digest()).decode()
+        try:
+            with open("/TS/.card") as f:
+                if f.read().strip() == digest:
+                    return False
+        except OSError:
+            pass
+        print("emu: installing the TS-Pico firmware from the card (%d files)" % len(names))
+        _rmtree("/TS.new")
+        os.mkdir("/TS.new")
+        for n in names:
+            with open(src + "/" + n, "rb") as f, open("/TS.new/" + n, "wb") as g:
+                g.write(f.read())
+    with open("/TS.new/.card", "w") as f:
+        f.write(digest + "\n")
+    _rmtree("/TS.old")
+    try:
+        os.rename("/TS", "/TS.old")
+    except OSError:
+        pass
+    os.rename("/TS.new", "/TS")
+    return True
+
+
 def _tspico():
     """Start the TS-Pico firmware (tspico/py/p4host.py) if it isn't running,
     and wait for it to be READY. Once started it runs until a hard reset,
-    across machine resets, as the Pico does on a TS2068 reset."""
+    across machine resets, as the Pico does on a TS2068 reset. A firmware
+    update on the card goes in first (update_firmware)."""
     import p4host
     if getattr(p4host, "_started", False):
         return True                     # READY was seen; the Z80 may have taken it
+    update_firmware()
     p4host.start()
     p4host._started = True
     t = time.ticks_ms()

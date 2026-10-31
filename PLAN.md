@@ -249,7 +249,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 **Gate 4 (met 2026-10-31, docs/NOTES.md Phase 4):** the same sessions behave the same on the P4 and on fuse-tspico + `pico_host`.
 
 ### Phase 5: Finish
-- [ ] Firmware updates by copying a new `src/TS` onto the microSD card, with no reflash.
+- [x] Firmware updates by copying a new `src/TS` onto the microSD card, with no reflash. *2026-10-31: a copy in the card's `/TS2068/TS` replaces the flash's `/TS` when the firmware next starts (`emu.update_firmware()`); checked on the board (docs/NOTES.md, Phase 5).*
 - [ ] Release as GPL-3, or GPL-2+ if the Fuse core was chosen.
 - [ ] Upstream: the platform layer and in-process transport into tspico-firmware-build; bug fixes back to Fuse and fuse-tspico.
 
