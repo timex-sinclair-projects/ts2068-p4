@@ -25,6 +25,21 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 git clone --recurse-submodules <repo-url>
 ```
 
+## Running it
+
+Build MicroPython with our board and modules, flash it, then put our files on the board's flash and the ROMs on its microSD card (docs/NOTES.md has the details):
+
+```bash
+cd ~/esp/micropython/ports/esp32
+make BOARD_DIR=<repo>/boards/CROWPANEL_P4_7 USER_C_MODULES=<repo>/usermods/micropython.cmake
+esptool --chip esp32p4 write-flash 0x10000 build-CROWPANEL_P4_7/micropython.bin
+cd <repo>
+python3 tools/p4/install.py
+python3 tools/p4/sd_roms.py
+```
+
+At power-on `main.py` starts the TS2068 from the card's `/TS2068` folder, with the TS-Pico firmware plugged in when the ROM is the 32K TS-Pico one, and puts the menu in the side panel above the on-screen keyboard. To boot to the REPL instead, create `/p4/noboot` on the flash.
+
 ## License
 
 To be set in Phase 2: GPL-2.0-or-later if Fuse's Z80 core is chosen, GPL-3.0 if Z80_JLS is (PLAN.md §2, "Licensing outcome").

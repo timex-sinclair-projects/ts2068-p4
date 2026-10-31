@@ -13,6 +13,7 @@ Stages everything in a temporary folder, then copies it with mpremote:
   /p4host.py, /p4replay.py    tspico/py
   /emu.py, /osd.py   usermods/ts2068: starts the TS2068 from the card, and
                      the side panel's menu
+  /main.py           usermods/ts2068: both at power-on (unless /p4/noboot)
   /p4/sd.json        the board's microSD (tools/p4/board.json)
   /p4/build.txt      the firmware commit, as pico_host shows it
   /traces/*.bin      test/traces/*.frames, packed
@@ -81,7 +82,7 @@ def stage(trace):
         p = os.path.join(REPO, "tspico", "py", name)
         if os.path.exists(p):
             shutil.copy(p, st)
-    for name in ("emu.py", "osd.py"):
+    for name in ("emu.py", "osd.py", "main.py"):
         shutil.copy(os.path.join(REPO, "usermods", "ts2068", name), st)
     os.makedirs(os.path.join(st, "p4"))
     with open(os.path.join(REPO, "tools", "p4", "board.json")) as f:
