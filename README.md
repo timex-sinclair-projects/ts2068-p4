@@ -9,7 +9,7 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 | Path | Contents |
 |---|---|
 | `boards/` | `CROWPANEL_P4_7`, the MicroPython board this is built as (a 4 MB app partition) |
-| `usermods/` | The MicroPython modules that join the layers: `ts2068` (the machine on the panel, plus `emu.py`, `osd.py`, `main.py`) and `p4bridge`. `usermods/micropython.cmake` is the build's entry point |
+| `usermods/` | The MicroPython modules that join the layers: `ts2068` (the machine on the panel, plus `emu.py`, `osd.py`, `btkbd.py`, `kbdmap.py`, `main.py`), `p4bridge`, and `hosted` (the C6's Bluetooth controller). `usermods/micropython.cmake` is the build's entry point |
 | `platform/` | P4 display, audio, touch, on-screen keyboard, menu area (`platform.cmake`) |
 | `machine/` | TS2068 machine, SCLD, paging and sound, lifted from Fuse (`machine.cmake`) |
 | `z80/` | Fuse's Z80 core (`z80.cmake`); `z80_jls/` is the one not chosen |

@@ -17,6 +17,7 @@ which boot.py puts on the import path:
                      (unless /p4/noboot)
   /p4/emu.py, /p4/osd.py   usermods/ts2068: starts the TS2068 from the card,
                      and the side panel's menu
+  /p4/btkbd.py, /p4/kbdmap.py   usermods/ts2068: a Bluetooth keyboard
   /p4/p4host.py, /p4/p4replay.py, /p4/seed_sd.py   tspico/py
   /p4/session.py     tools/p4: typing BASIC from scripts
   /p4/sd.json        the board's microSD (tools/p4/board.json)
@@ -87,7 +88,7 @@ def stage(trace):
     os.makedirs(p4, exist_ok=True)
     for name in ("p4host.py", "p4replay.py", "seed_sd.py"):
         shutil.copy(os.path.join(REPO, "tspico", "py", name), p4)
-    for name in ("emu.py", "osd.py"):
+    for name in ("emu.py", "osd.py", "btkbd.py", "kbdmap.py"):
         shutil.copy(os.path.join(REPO, "usermods", "ts2068", name), p4)
     shutil.copy(os.path.join(REPO, "tools", "p4", "session.py"), p4)
     for name in ("boot.py", "main.py"):

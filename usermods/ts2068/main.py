@@ -1,5 +1,6 @@
 # main.py: at power-on, the TS2068 from the card (emu.start, with the
-# TS-Pico for a 32K ROM) and the side panel's menu (osd.start).
+# TS-Pico for a 32K ROM), the side panel's menu (osd.start), and Bluetooth
+# with the saved keyboard, if one was paired (btkbd.start).
 #
 # To boot to the REPL instead, create /p4/noboot:
 #   mpremote exec "open('/p4/noboot', 'w').close()"
@@ -22,6 +23,9 @@ except OSError:
         import osd
         emu.start()
         osd.start()
+        import btkbd
+        if btkbd.saved():
+            btkbd.start()
     except Exception as e:
         import sys
         sys.print_exception(e)

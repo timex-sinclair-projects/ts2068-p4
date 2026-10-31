@@ -136,3 +136,23 @@ The numbers are in NOTES.md, "Phase 3 progress".
 - **48 kHz:** it matches Fuse too, but costs about 9% more filter work for nothing a TV speaker model can carry.
 - **Pacing by esp_timer with sound:** two clocks would drift, and the sound would underrun or overflow.
 
+
+## D8. Physical keyboard: Bluetooth, through the C6 (2026-10-31)
+
+**Decided:**
+
+- **A BLE HID keyboard**, through the ESP32-C6 and esp-hosted, with MicroPython's `bluetooth` (NimBLE) on the P4 as the HID host. `usermods/ts2068/btkbd.py` pairs, bonds and reconnects; `kbdmap.py` turns its boot reports into the matrix rows `ts2068.keys()` takes.
+- **Pairing without a passkey** (Secure Connections "Just Works"), until MicroPython passes passkey requests on connections it makes (NOTES.md). The link is encrypted and bonded; what's given up is protection while it pairs.
+- **The keys type what they say** on a PC keyboard, through SYMBOL SHIFT where the TS2068 has the symbol on another key; Ctrl and Alt are SYMBOL SHIFT itself, for keywords.
+
+The details and checks are in NOTES.md, "Phase 3 progress".
+
+**Why:**
+
+- **Over USB host (Q3):** the OTG port's VBUS only feeds the board, so a USB keyboard would need a powered hub or an adapter (NOTES.md, inferred from the schematic). Bluetooth needs nothing plugged in.
+- **Over a matrix keyboard on an I2C expander:** that's hardware to build. It stays possible, since the machine takes rows from anywhere.
+- **Keys that type what they say:** most keyboards on hand will be PC keyboards; the TS2068's own layout is still there through Ctrl.
+
+**Rejected:**
+
+- **Bluetooth Classic (BR/EDR) keyboards:** the C6 is BLE only.

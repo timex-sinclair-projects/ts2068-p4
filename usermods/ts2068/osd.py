@@ -12,14 +12,18 @@
 #   Load snapshot     from /TS2068/SNAPS
 #   Save snapshot     to SNAPS, as SNAPnnn.szx, the next number free
 #   Reset             the machine started again from the settings
+#   Keyboard          pair a Bluetooth keyboard, or forget it (btkbd.py)
 #   Volume  -  10  +
 #
-# A list page shows seven names at a time, with Back, up and down.
+# A list page shows seven names at a time, with Back, up and down. The
+# bottom row is the status line; the keyboard's progress shows there as it
+# changes.
 
 import os
 import time
 import _thread
 
+import btkbd
 import emu
 import ts2068
 
@@ -28,7 +32,7 @@ COLS = 31
 PLAIN, INVERSE, BUTTON = 0, 1, 2
 LIST_ROWS = 7                           # rows 1-7 of a list page
 
-_page = None                            # "main", "roms" or "snaps"
+_page = None                            # "main", "roms", "snaps" or "kbd"
 _items = []
 _top = 0
 _status = ""
@@ -55,7 +59,7 @@ def _main():
     _row(3, "  Load snapshot", BUTTON)
     _row(4, "  Save snapshot", BUTTON)
     _row(5, "  Reset", BUTTON)
-    _row(6, "")
+    _row(6, "  Keyboard", BUTTON)
     _row(7, "  Volume    -   %3d   +" % s["volume"])
     _row(8, "")
     _say(_status)
@@ -121,6 +125,9 @@ def _tap_main(row, col):
         emu.start()
         _main()
         _say("Reset")
+    elif row == 6:
+        name = btkbd.saved()
+        _list("kbd", "Keyboard", ["Pair a keyboard"] + (["Forget " + name] if name else []))
     elif row == 7:
         s = emu.settings()
         v = s["volume"]
@@ -150,7 +157,14 @@ def _tap_list(row, col):
     n = _top + row - 1
     if not 1 <= row <= LIST_ROWS or n >= len(_items):
         return
-    if _page == "roms":
+    if _page == "kbd":
+        _main()
+        if n == 0:
+            btkbd.pair()
+        else:
+            btkbd.forget()
+        _say(btkbd.status())
+    elif _page == "roms":
         name, exrom = _roms_found[n]
         _say("Starting " + name)
         changes = {"rom": name}
@@ -168,7 +182,11 @@ def _tap_list(row, col):
 
 
 def _loop():
+    kbd = btkbd.status()
     while True:
+        if btkbd.status() != kbd:
+            kbd = btkbd.status()
+            _say(kbd)
         tap = ts2068.osd_tap()
         if tap:
             try:

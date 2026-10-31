@@ -9,3 +9,33 @@ CONFIG_LCD_DSI_ISR_CACHE_SAFE=y
 # fetch the emulator's code: a frame stalled for up to 52 ms and the audio
 # ran dry whenever anything wrote to the flash filesystem.
 CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+
+
+# The C6 co-processor (Wi-Fi and BLE through esp-hosted, over SDIO slot 1).
+# MicroPython's P4 boards use the ESP32-P4 Function EV Board's pins, which
+# are wrong here twice: this board's data lines run the other way (D0 on
+# GPIO17 to D3 on GPIO14, as Elecrow's examples have them), and the C6's
+# enable is on GPIO32 (the schematic's C6_EN), not 54. With the Function
+# board's pins the card initialised but the C6 never answered.
+CONFIG_ESP_HOSTED_P4_DEV_BOARD_NONE=y
+# CONFIG_ESP_HOSTED_P4_DEV_BOARD_FUNC_BOARD is not set
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CMD_SLOT_1=19
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CLK_SLOT_1=18
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D0_SLOT_1=17
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=16
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=15
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=14
+CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=32
+
+# NimBLE's host task on core 1, with MicroPython and the TS-Pico firmware,
+# not core 0, where the emulator runs in real time
+# CONFIG_BT_NIMBLE_PINNED_TO_CORE_0 is not set
+CONFIG_BT_NIMBLE_PINNED_TO_CORE_1=y
+
+# NimBLE's buffers in PSRAM. Internal DMA-capable RAM is nearly all taken
+# by the time Bluetooth starts (about 29 KB free), and esp-hosted's VHCI
+# transport needs it for every packet it sends to the C6; with NimBLE's
+# pools in there too its mallocs fail and BLE().active(True) times out.
+# The controller is on the C6, so nothing DMAs from these pools.
+# CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_INTERNAL is not set
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
