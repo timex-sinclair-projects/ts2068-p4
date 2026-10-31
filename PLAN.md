@@ -215,14 +215,14 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 **Gate 1 (met 2026-10-30, `docs/NOTES.md`):** the traces replay with matching replies on the P4, using the microSD card. If this fails: put the firmware on a separate RP2040/RP2350 attached by UART or SPI. That's real hardware, which the TS-Pico team already builds.
 
 ### Phase 2: Choose the Z80 core and lift the machine (Q2, Q6)
-- [ ] Lift Fuse's TS2068 machine, SCLD and paging behind the `machine_*` API. Compile it for the host first, then the P4. Record every extra file it pulls in (Q6). *Host: done 2026-10-30 (`machine/`, docs/NOTES.md). P4: not yet. The beam-following display and sound are still to lift.*
+- [ ] Lift Fuse's TS2068 machine, SCLD and paging behind the `machine_*` API. Compile it for the host first, then the P4. Record every extra file it pulls in (Q6). *Host and P4: done 2026-10-30 (`machine/`, `usermods/ts2068`, docs/NOTES.md). The API is prefixed `ts2068_`, since MicroPython owns `machine_*`. The beam-following display and sound are still to lift.*
 - [x] Fix DOCK/EXROM contention for the TS2068 in the lifted module (§3, "Contention"). Add the DOCK-vs-HOME timing program to `/test`. *(2026-10-30: `test/basic/dockhome.asm`.)*
 - [ ] Wrap two cores behind the same Z80 interface:
   - Fuse's core: generate its opcode files on the host.
   - ESPectrum's Z80_JLS: strip its ESPectrum-specific hooks.
 - [ ] Host check: boot the TS2068 ROM on both cores and compare against fuse-tspico (screen and memory after N frames). *Fuse's core: matches, 2026-10-30 (registers and screen; Fuse can't dump memory). Z80_JLS: not yet.*
 - [ ] Accuracy: run a Z80 instruction-exerciser suite on both cores (zexdoc/zexall, or Fuse's `coretest`).
-- [ ] P4 benchmark: a fixed BASIC loop, frame timing with no display. Keep Z80-visible RAM and hot tables in L2MEM.
+- [ ] P4 benchmark: a fixed BASIC loop, frame timing with no display. Keep Z80-visible RAM and hot tables in L2MEM. *Fuse's core: 2.5 ms a frame, 15% of the budget (2026-10-30, `tools/p4/bench_ts2068.py`). Z80_JLS: not yet.*
 - [ ] Record the decision, with the numbers, in `docs/DECISIONS.md`.
 
 **Gate 2:** at least one core holds a sustained emulated frame under 16.6 ms (one 60.1145 Hz frame) with headroom for display and audio, and passes the exerciser. A tie goes to Fuse's core (GPL-2+, same code base as the machine).

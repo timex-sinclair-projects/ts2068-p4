@@ -6,10 +6,10 @@
 ROOT := ../..
 CFLAGS ?= -O2 -Wall
 CPPFLAGS := -DHAVE_ENOUGH_MEMORY -I$(ROOT)/compat -I$(ROOT)/z80 -I$(ROOT)/machine -I$(ROOT)
-SRC := run_ts2068.c $(ROOT)/machine/ts2068.c $(ROOT)/machine/event.c \
+SRC := run_ts2068.c basic_loop.c $(ROOT)/machine/ts2068.c $(ROOT)/machine/event.c \
        $(ROOT)/z80/z80.c $(ROOT)/z80/z80_ops.c
 
-run_ts2068: $(SRC) $(wildcard $(ROOT)/z80/*.h $(ROOT)/z80/*.c $(ROOT)/machine/*.h)
+run_ts2068: $(SRC) $(wildcard $(ROOT)/z80/*.h $(ROOT)/z80/*.c $(ROOT)/machine/*.h basic_loop.h)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRC)
 
 TIMING := $(ROOT)/test/basic

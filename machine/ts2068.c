@@ -52,7 +52,7 @@
 /* When the top-left pixel of the shown border is drawn: Fuse's
    machine->line_times[0], 3777 */
 #define LINE_TIMES_0 \
-  ( TOP_LEFT_PIXEL - BORDER_LINES * MACHINE_TSTATES_PER_LINE - 4 * BORDER_COLS )
+  ( TOP_LEFT_PIXEL - BORDER_LINES * TS2068_TSTATES_PER_LINE - 4 * BORDER_COLS )
 
 /* An instruction can run past the end of the frame before the frame
    event is taken: room for the longest, contended */
@@ -65,8 +65,8 @@ int z80_int_disabled;
 
 /* z80_machine.h: whether each 8K chunk is contended now, and the delay
    at each T-state of the frame (Fuse's ula_contention) */
-libspectrum_byte machine_contended[ 8 ];
-libspectrum_byte machine_contention[ MACHINE_TSTATES_PER_FRAME + CONTENTION_SLACK ];
+libspectrum_byte ts2068_contended[ 8 ];
+libspectrum_byte ts2068_contention[ TS2068_TSTATES_PER_FRAME + CONTENTION_SLACK ];
 
 /* Memory. HOME: the 16K ROM, then RAM at 0x4000-0xFFFF (Fuse's RAM pages
    5, 2 and 0); RAM5, the screen, is contended. EXROM: 8K, or 16K with
@@ -101,7 +101,7 @@ static const libspectrum_byte ay_mask[ 16 ] = {
   0x1f, 0x1f, 0x1f, 0xff, 0xff, 0x0f, 0xff, 0xff,
 };
 
-static machine_tspico_fn tspico;
+static ts2068_tspico_fn tspico;
 static void *tspico_ctx;
 
 /* Frames */
@@ -139,15 +139,15 @@ memory_map( void )
       else
         read_map[ c ] = empty_chunk;
       write_map[ c ] = NULL;
-      machine_contended[ c ] = fuse_dock_contention && screen_chunk;
+      ts2068_contended[ c ] = fuse_dock_contention && screen_chunk;
     } else if( c < 2 ) {
       read_map[ c ] = home_rom + c * 0x2000;
       write_map[ c ] = NULL;
-      machine_contended[ c ] = 0;
+      ts2068_contended[ c ] = 0;
     } else {
       write_map[ c ] = ram + ( c - 2 ) * 0x2000;
       read_map[ c ] = write_map[ c ];
-      machine_contended[ c ] = screen_chunk;
+      ts2068_contended[ c ] = screen_chunk;
     }
   }
 }
@@ -161,8 +161,8 @@ readbyte_internal( libspectrum_word address )
 libspectrum_byte
 readbyte( libspectrum_word address )
 {
-  if( machine_contended[ address >> 13 ] )
-    tstates += machine_contention[ tstates ];
+  if( ts2068_contended[ address >> 13 ] )
+    tstates += ts2068_contention[ tstates ];
   tstates += 3;
 
   return read_map[ address >> 13 ][ address & 0x1fff ];
@@ -173,8 +173,8 @@ writebyte( libspectrum_word address, libspectrum_byte b )
 {
   libspectrum_byte *chunk = write_map[ address >> 13 ];
 
-  if( machine_contended[ address >> 13 ] )
-    tstates += machine_contention[ tstates ];
+  if( ts2068_contended[ address >> 13 ] )
+    tstates += ts2068_contention[ tstates ];
   tstates += 3;
 
   if( chunk ) chunk[ address & 0x1fff ] = b;
@@ -192,11 +192,11 @@ contend_delay( libspectrum_dword time )
   int line, tstates_through_line;
 
   line = (libspectrum_signed_dword)( time - LINE_TIMES_0 ) /
-         MACHINE_TSTATES_PER_LINE;
+         TS2068_TSTATES_PER_LINE;
 
   tstates_through_line = time - LINE_TIMES_0 +
                          ( LEFT_BORDER - BORDER_COLS * 4 );
-  tstates_through_line %= MACHINE_TSTATES_PER_LINE;
+  tstates_through_line %= TS2068_TSTATES_PER_LINE;
 
   if( line < BORDER_LINES || line >= BORDER_LINES + SCREEN_LINES ) return 0;
   if( tstates_through_line < LEFT_BORDER - 1 ) return 0;
@@ -217,8 +217,8 @@ port_from_scld( libspectrum_word port )
 static void
 contend_port_early( libspectrum_word port )
 {
-  if( machine_contended[ port >> 13 ] )
-    tstates += machine_contention[ tstates ];
+  if( ts2068_contended[ port >> 13 ] )
+    tstates += ts2068_contention[ tstates ];
   tstates++;
 }
 
@@ -226,11 +226,11 @@ static void
 contend_port_late( libspectrum_word port )
 {
   if( port_from_scld( port ) ) {
-    tstates += machine_contention[ tstates ]; tstates += 2;
-  } else if( machine_contended[ port >> 13 ] ) {
-    tstates += machine_contention[ tstates ]; tstates++;
-    tstates += machine_contention[ tstates ]; tstates++;
-    tstates += machine_contention[ tstates ];
+    tstates += ts2068_contention[ tstates ]; tstates += 2;
+  } else if( ts2068_contended[ port >> 13 ] ) {
+    tstates += ts2068_contention[ tstates ]; tstates++;
+    tstates += ts2068_contention[ tstates ]; tstates++;
+    tstates += ts2068_contention[ tstates ];
   } else {
     tstates += 2;
   }
@@ -281,8 +281,8 @@ static libspectrum_byte
 tspico_access( libspectrum_word port, int out, libspectrum_byte b )
 {
   int status = ( port & 0xff ) == 0x0f;
-  int op = out ? ( status ? MACHINE_TSPICO_OUT_STATUS : MACHINE_TSPICO_OUT_DATA )
-               : ( status ? MACHINE_TSPICO_IN_STATUS : MACHINE_TSPICO_IN_DATA );
+  int op = out ? ( status ? TS2068_TSPICO_OUT_STATUS : TS2068_TSPICO_OUT_DATA )
+               : ( status ? TS2068_TSPICO_IN_STATUS : TS2068_TSPICO_IN_DATA );
 
   return tspico ? tspico( op, b, tspico_ctx ) : 0xff;
 }
@@ -333,7 +333,7 @@ port_write( libspectrum_word port, libspectrum_byte b )
 
   case 0xfe:
     ula_last_byte = b;
-    ula_default_value = 0x5f;   /* Fuse: machine_current->timex */
+    ula_default_value = 0x5f;   /* Fuse: ts2068_current->timex */
     break;
 
   case 0xf4:
@@ -389,10 +389,10 @@ frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
 {
   (void)event_tstates; (void)type; (void)user_data;
 
-  event_frame( MACHINE_TSTATES_PER_FRAME );
-  tstates -= MACHINE_TSTATES_PER_FRAME;
+  event_frame( TS2068_TSTATES_PER_FRAME );
+  tstates -= TS2068_TSTATES_PER_FRAME;
   if( z80.interrupts_enabled_at >= 0 )
-    z80.interrupts_enabled_at -= MACHINE_TSTATES_PER_FRAME;
+    z80.interrupts_enabled_at -= TS2068_TSTATES_PER_FRAME;
 
   /* display_render_frame: FLASH swaps every 16 frames */
   if( ++flash_frame_count == 16 ) {
@@ -402,14 +402,14 @@ frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
     flash_frame_count = 0;
   }
 
-  event_add( MACHINE_TSTATES_PER_FRAME, frame_event );
+  event_add( TS2068_TSTATES_PER_FRAME, frame_event );
   frame_count++;
 
   z80_interrupt();
 }
 
 void
-machine_run_frame( void )
+ts2068_run_frame( void )
 {
   libspectrum_dword frame = frame_count;
 
@@ -420,7 +420,7 @@ machine_run_frame( void )
 }
 
 libspectrum_dword
-machine_frame_count( void )
+ts2068_frame_count( void )
 {
   return frame_count;
 }
@@ -428,7 +428,7 @@ machine_frame_count( void )
 /* ---- setup ------------------------------------------------------------- */
 
 int
-machine_init( const machine_config_t *config )
+ts2068_init( const ts2068_config_t *config )
 {
   static int core_ready;
   libspectrum_dword t;
@@ -451,27 +451,27 @@ machine_init( const machine_config_t *config )
   tspico_ctx = config->tspico_ctx;
   fuse_dock_contention = config->fuse_dock_contention;
 
-  for( t = 0; t < MACHINE_TSTATES_PER_FRAME; t++ )
-    machine_contention[ t ] = contend_delay( t );
+  for( t = 0; t < TS2068_TSTATES_PER_FRAME; t++ )
+    ts2068_contention[ t ] = contend_delay( t );
 
   memset( keyboard, 0xff, sizeof( keyboard ) );
   memset( joystick, 0, sizeof( joystick ) );
 
-  machine_reset( 1 );
+  ts2068_reset( 1 );
   return 0;
 }
 
-/* Fuse's machine_select and machine_reset, with the TS2068's and the
+/* Fuse's ts2068_select and ts2068_reset, with the TS2068's and the
    modules' resets in the order Fuse runs them. Not Fuse: a hard reset
    clears RAM (power-on); Fuse's RAM is only zero when it starts. */
 void
-machine_reset( int hard_reset )
+ts2068_reset( int hard_reset )
 {
   if( hard_reset ) memset( ram, 0, sizeof( ram ) );
 
   event_reset();
   tstates = 0;
-  event_add( MACHINE_TSTATES_PER_FRAME, frame_event );
+  event_add( TS2068_TSTATES_PER_FRAME, frame_event );
 
   scld_hsr = 0;
   scld_dec = 0;
@@ -490,13 +490,13 @@ machine_reset( int hard_reset )
 /* ---- for the platform -------------------------------------------------- */
 
 libspectrum_byte
-machine_peek( libspectrum_word address )
+ts2068_peek( libspectrum_word address )
 {
   return readbyte_internal( address );
 }
 
 void
-machine_poke( libspectrum_word address, libspectrum_byte value )
+ts2068_poke( libspectrum_word address, libspectrum_byte value )
 {
   libspectrum_byte *chunk = write_map[ address >> 13 ];
 
@@ -504,19 +504,19 @@ machine_poke( libspectrum_word address, libspectrum_byte value )
 }
 
 libspectrum_byte *
-machine_home_ram( void )
+ts2068_home_ram( void )
 {
   return ram;
 }
 
 void
-machine_set_keyboard( const libspectrum_byte rows[ 8 ] )
+ts2068_set_keyboard( const libspectrum_byte rows[ 8 ] )
 {
   memcpy( keyboard, rows, sizeof( keyboard ) );
 }
 
 void
-machine_set_joystick( int which, libspectrum_byte bits )
+ts2068_set_joystick( int which, libspectrum_byte bits )
 {
   joystick[ which & 1 ] = bits;
 }
@@ -563,7 +563,7 @@ attr_start( int y )
 }
 
 void
-machine_render( libspectrum_byte *pixels )
+ts2068_render( libspectrum_byte *pixels )
 {
   const libspectrum_byte *screen = ram;         /* RAM5 */
   int hires = !!( scld_dec & SCLD_HIRES );
@@ -576,11 +576,11 @@ machine_render( libspectrum_byte *pixels )
   } else {
     border = ula_last_byte & 0x07;
   }
-  memset( pixels, border, MACHINE_SCREEN_WIDTH * MACHINE_SCREEN_HEIGHT );
+  memset( pixels, border, TS2068_SCREEN_WIDTH * TS2068_SCREEN_HEIGHT );
 
   for( y = 0; y < SCREEN_LINES; y++ ) {
     libspectrum_byte *row = pixels +
-      ( y + BORDER_LINES ) * MACHINE_SCREEN_WIDTH + BORDER_COLS * 16;
+      ( y + BORDER_LINES ) * TS2068_SCREEN_WIDTH + BORDER_COLS * 16;
 
     for( x = 0; x < 32; x++ ) {
       int offset = line_start( y ) + x +
@@ -621,7 +621,7 @@ machine_render( libspectrum_byte *pixels )
 #include "z80_macros.h"
 
 void
-machine_get_state( machine_state_t *out )
+ts2068_get_state( ts2068_state_t *out )
 {
   out->af = AF; out->bc = BC; out->de = DE; out->hl = HL;
   out->af_ = AF_; out->bc_ = BC_; out->de_ = DE_; out->hl_ = HL_;

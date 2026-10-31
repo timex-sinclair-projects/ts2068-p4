@@ -10,22 +10,22 @@
 
 #include "libspectrum.h"
 
-extern libspectrum_byte machine_contended[ 8 ];
-extern libspectrum_byte machine_contention[];
+extern libspectrum_byte ts2068_contended[ 8 ];
+extern libspectrum_byte ts2068_contention[];
 
 #define contend_read(address,time) \
-  if( machine_contended[ (libspectrum_word)(address) >> 13 ] ) \
-    tstates += machine_contention[ tstates ]; \
+  if( ts2068_contended[ (libspectrum_word)(address) >> 13 ] ) \
+    tstates += ts2068_contention[ tstates ]; \
   tstates += (time);
 
 #define contend_read_no_mreq(address,time) \
-  if( machine_contended[ (libspectrum_word)(address) >> 13 ] ) \
-    tstates += machine_contention[ tstates ]; \
+  if( ts2068_contended[ (libspectrum_word)(address) >> 13 ] ) \
+    tstates += ts2068_contention[ tstates ]; \
   tstates += (time);
 
 #define contend_write_no_mreq(address,time) \
-  if( machine_contended[ (libspectrum_word)(address) >> 13 ] ) \
-    tstates += machine_contention[ tstates ]; \
+  if( ts2068_contended[ (libspectrum_word)(address) >> 13 ] ) \
+    tstates += ts2068_contention[ tstates ]; \
   tstates += (time);
 
 #endif /* Z80_MACHINE_H */

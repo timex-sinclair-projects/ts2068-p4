@@ -227,3 +227,20 @@ With `fuse_dock_contention` set, ours matches Fuse's column exactly. On a real T
 - **The workaround:** `compare_fuse.py` compares only the left border and the screen's left 16 columns.
 - **The fix,** in fuse-tspico, the user's fork: write the PNG from `screen_rgb`, the buffer it already captured. Not raised yet.
 
+**P4 benchmark, Fuse's core (2026-10-30).** `usermods/ts2068` builds `machine/` and `z80/` into the MicroPython image as a `ts2068` module. `ts2068.bench()` runs the machine in a task pinned to core 0 (priority 5) with no display, audio or TS-Pico. It boots the stock ROM and types the fixed BASIC loop on the emulated keyboard: `10 FOR I=1 TO 9999: NEXT I`, `RUN` (`test/machine/basic_loop.c`). The loop runs from about frame 290 to frame 2908. `tools/p4/bench_ts2068.py` times frames 300 to 2800, then runs the same frames on the host and compares a hash of the 48K of RAM.
+
+| | Per frame |
+|---|---|
+| Mean, BASIC loop (2,500 frames) | 2,515 µs |
+| Min / max | 2,499 / 2,557 µs |
+| Mean, booting (frames 0–300) | 2,330 µs |
+| Budget (one 60.1145 Hz frame) | 16,635 µs |
+
+- **Headroom:** 15% of the budget used, about 6.6× real time. No frame came close to the budget, and two runs agreed to within 2 µs.
+- **Correctness:** the RAM after 2,800 frames is the same on the P4 and the host (FNV-1a `22bb9d65`).
+- **Where things live:** the emulated RAM, the ROM copies and the contention table landed in internal L2MEM (`0x4FF4xxxx`) as plain `.bss`, with no attributes needed. The Z80 core runs from flash through the cache: `z80_do_opcodes` is 106 KB, with the prefixed opcodes inlined (`HAVE_ENOUGH_MEMORY`). Moving it to internal RAM, or building without `HAVE_ENOUGH_MEMORY`, could be tried if the platform layer needs the time, but there's no need yet.
+- **Gotcha:** MicroPython's esp32 port exports `machine_init`, which collided at link time. The machine API is now prefixed `ts2068_`.
+- **Space:** the app partition is now 93% full: `micropython.bin` is 0x1ccf40 of 0x1f0000, leaving 140 KB. Phase 3's platform layer will need a bigger partition table or a smaller image.
+
+Gate 2 isn't met yet: zexdoc/zexall and the Z80_JLS comparison are still to do. On these numbers Fuse's core has ample headroom, and a tie goes to it.
+
