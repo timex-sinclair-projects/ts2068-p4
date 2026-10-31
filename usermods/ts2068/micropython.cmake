@@ -34,6 +34,7 @@ target_sources(usermod_ts2068 INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/modts2068.c
     ${TS2068_ROOT}/machine/ts2068.c
     ${TS2068_ROOT}/machine/event.c
+    ${TS2068_ROOT}/machine/szx.c
     ${TS2068_ROOT}/machine/sound/sound.c
     ${TS2068_ROOT}/machine/sound/ay_engine.c
     ${TS2068_ROOT}/machine/sound/blipbuffer.c
@@ -58,8 +59,11 @@ target_include_directories(usermod_ts2068 INTERFACE
 )
 
 # SOUND_REAL: the sound filters in float, which the P4's FPU does, not
-# Fuse's double, which it doesn't (machine/sound/sound_real.h)
-target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY SOUND_REAL=float)
+# Fuse's double, which it doesn't (machine/sound/sound_real.h).
+# SZX_ROM_MINIZ: inflate snapshots with the miniz in the P4's ROM, not zlib
+# (machine/szx.c)
+target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY SOUND_REAL=float
+    SZX_ROM_MINIZ)
 
 # MicroPython's main component doesn't ask for these IDF components, but
 # they're in the build

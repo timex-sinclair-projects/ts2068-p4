@@ -12,6 +12,7 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 | `ts2068.c` | The machine. Fuse's `machines/ts2068.c` and `tc2068.c`, `peripherals/scld.c`, `ula.c` and `sound/ay.c` (the register file), `machines/machines_periph.c` (the Timex AY ports), `spectrum.c` (the frame event and contention delay), `machine.c` (timings), `periph.c` (port I/O and its contention) and `memory_pages.c` (memory access), in one file. `display_render.c`'s Timex modes for `ts2068_render` |
 | `z80_machine.h` | The contention macros `z80_glue.h` asks for: Fuse's, keyed on one flag per 8K chunk |
 | `event.c`, `event.h` | Fuse's event queue semantics (time, then type; a new event before an equal one) in a fixed array, without glib |
+| `szx.c` | SZX snapshots, written new: the chunks libspectrum writes for a TS2068 (no code from it), saved uncompressed, loaded compressed or not (zlib on the host, the ROM's miniz on the P4). `ts2068_snap_get`/`ts2068_snap_set` in `ts2068.c` restore the state in the order Fuse's `snapshot_copy_from` does |
 | `sound/` | The sound (DECISIONS.md D7): Fuse's `sound/ay_engine.c`, `blipbuffer.c`, `tv_filter.c` and `ula_filter.c`, with includes adjusted, and `sound.c`, the part of Fuse's `sound.c` and `sound/output_mixer.c` a TS2068 uses (the TV speaker route, mono). `ts2068_sound_init` and `ts2068_sound_samples` in `machine.h` are the platform's view of it |
 
 ## How it differs from Fuse
@@ -22,9 +23,10 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 - **Contention:** one 58,688-entry delay table (Fuse keeps two of 80,000, identical on the TS2068), filled from Fuse's `spectrum_contend_delay_65432100`. That's still the Spectrum's pattern, and whether the SCLD contends like this is unmeasured (PLAN.md §1.6, Q10). A chunk is contended only when HOME RAM5 is mapped there. `fuse_dock_contention` restores Fuse's rule, which contends DOCK and EXROM at 0x4000–0x7FFF too.
 - **Ports:** every TS2068 port is decoded on its low byte and no two share one, so Fuse's peripheral list is a switch: FE (ULA), F4 and FF (SCLD), F5 and F6 (AY, with the joysticks on R14), 0E and 0F (the TS-Pico, through `machine_tspico_fn`). Anything else reads FFh, since the 2068 has no floating bus.
 - **Reset:** Fuse's order. A hard reset also clears RAM; Fuse's RAM is zero only when Fuse starts.
+- **Snapshots:** SZX only, and only what a stock TS2068 needs: no DOCK chunks (a snapshot with DOCK-bank pages is refused), no custom-ROM chunk. `make -C test/machine szx` checks them: libspectrum rewrites ours byte for byte, and Fuse and we run the same snapshot to the same registers, screen and sound (docs/NOTES.md, "Snapshots").
 
 ## Not yet here
 
 - **The display follows the beam in Fuse** (docs/NOTES.md, Q7): `display.c`, `display_dirty.c`, `display_border.c`. `ts2068_render` (or `ts2068_render_line`, one line at a time, which the P4 display uses) draws from screen RAM once a frame, so mid-frame mode, colour and border changes don't show yet. Fuse's dirty-line tracking would also save the P4 display about 2.4 ms a frame of rendering and hashing unchanged lines (docs/NOTES.md, "Phase 3 progress").
 - **DOCK cartridges** (`dck.c`): the DOCK reads FFh.
-- **Snapshots, RZX, the debugger, the tape and SLT traps:** not planned. The TS-Pico is the tape.
+- **RZX, the debugger, the tape and SLT traps:** not planned. The TS-Pico is the tape.

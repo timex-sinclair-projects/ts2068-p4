@@ -224,7 +224,7 @@ read_test( FILE *f, libspectrum_dword *end_tstates )
 {
   unsigned af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc, memptr;
   unsigned i, r, iff1, iff2, im, halted;
-  z80_regs_t regs;
+  z80_regs_t regs = { 0 };
   unsigned end_tstates2;
   unsigned address;
   char test_name[ 80 ];

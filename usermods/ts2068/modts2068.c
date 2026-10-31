@@ -10,6 +10,8 @@
 //   ts2068.run_status()              # -> dict of frame timings
 //   ts2068.volume(10)                # 0-100
 //   ts2068.stop()
+//   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
+//   ts2068.load_snapshot(data)       # after run(), running or stopped
 //   ts2068.display_check()           # -> pixels differing from the machine
 //
 // The benchmark boots the ROM, types the fixed BASIC loop
@@ -69,6 +71,16 @@ static struct {
     int64_t started;
     uint64_t audio_wait_us, touch_us;
 } r;
+static bool machine_ready;              // run() has initialised the machine
+
+// A snapshot asked for while the machine runs: the run task takes it
+// between frames, then clears op
+static struct {
+    volatile enum { SNAP_NONE, SNAP_SAVE, SNAP_LOAD } op;
+    uint8_t *buf;
+    size_t len;
+    int result;
+} snap;
 static esp_timer_handle_t tick;
 static TaskHandle_t run_handle;
 
@@ -162,9 +174,23 @@ static void tick_cb(void *arg) {
     xTaskNotifyGive(run_handle);
 }
 
+static void snap_do(void) {
+    if (snap.op == SNAP_SAVE) {
+        snap.result = ts2068_szx_save(snap.buf, snap.len);
+    } else {
+        snap.result = ts2068_szx_load(snap.buf, snap.len);
+    }
+}
+
 static void run_task(void *arg) {
     (void)arg;
     while (!r.stop) {
+        if (snap.op != SNAP_NONE) {
+            __sync_synchronize();       // see buf and len as they were set
+            snap_do();
+            __sync_synchronize();       // and the caller, the result
+            snap.op = SNAP_NONE;
+        }
         if (!r.sound) {
             uint32_t n = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
             if (n == 0) {
@@ -252,6 +278,7 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     if (ts2068_init(&cfg)) {
         mp_raise_ValueError(MP_ERROR_TEXT("EXROM: not 8K or 16K"));
     }
+    machine_ready = true;
     p4_keyboard_init((const uint8_t *)home.buf + ROM_FONT);
     p4_display_set_side(p4_keyboard_draw);
     if (sound && ts2068_sound_init(SAMPLE_RATE)) {
@@ -294,6 +321,55 @@ static mp_obj_t stop(void) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(stop_obj, stop);
+
+// Between frames: by the run task while it runs, here when stopped
+static int snap_request(int op, uint8_t *buf, size_t len) {
+    if (!machine_ready) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("run() first"));
+    }
+    snap.buf = buf;
+    snap.len = len;
+    __sync_synchronize();               // before the other core sees op
+    snap.op = op;
+    if (r.running) {
+        while (snap.op != SNAP_NONE && r.running) {
+            mp_hal_delay_ms(1);
+        }
+    }
+    __sync_synchronize();
+    if (snap.op != SNAP_NONE) {         // stopped, or it stopped first
+        snap_do();
+        snap.op = SNAP_NONE;
+    }
+    return snap.result;
+}
+
+// snapshot() -> the machine as an SZX file, uncompressed (about 48K)
+static mp_obj_t snapshot(void) {
+    vstr_t v;
+    vstr_init_len(&v, TS2068_SZX_SIZE);
+    v.len = snap_request(SNAP_SAVE, (uint8_t *)v.buf, v.len);
+    return mp_obj_new_bytes_from_vstr(&v);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(snapshot_obj, snapshot);
+
+// load_snapshot(data): restore an SZX file, compressed or not, into the
+// machine run() set up (the ROMs are run()'s)
+static mp_obj_t load_snapshot(mp_obj_t data) {
+    mp_buffer_info_t b;
+    mp_get_buffer_raise(data, &b, MP_BUFFER_READ);
+    int err = snap_request(SNAP_LOAD, b.buf, b.len);
+    if (err) {
+        static const char *const why[] = {
+            "not a TS2068 SZX file", "corrupt", "needs a DOCK, or too old",
+            "a compressed page didn't inflate",
+        };
+        mp_raise_msg_varg(&mp_type_ValueError, MP_ERROR_TEXT("snapshot: %s"),
+            err >= -4 ? why[-err - 1] : "?");
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(load_snapshot_obj, load_snapshot);
 
 // display_check() -> pixels on the panel that differ from the machine's
 // screen; call after stop()
@@ -404,6 +480,8 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&run_obj) },
     { MP_ROM_QSTR(MP_QSTR_run_status), MP_ROM_PTR(&run_status_obj) },
     { MP_ROM_QSTR(MP_QSTR_volume), MP_ROM_PTR(&volume_obj) },
+    { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
+    { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_display_check), MP_ROM_PTR(&display_check_obj) },
 };

@@ -99,4 +99,43 @@ typedef struct {
 
 void ts2068_get_state( ts2068_state_t *out );
 
+/* Everything an SZX snapshot holds besides HOME RAM (ts2068_home_ram):
+   the Z80, with the EI and F flags SZX keeps; the T-state in the frame;
+   the last bytes written to ports FE, F4 and FF; the AY's register file
+   and selected register. */
+typedef struct {
+  uint16_t af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc, memptr;
+  uint8_t i, r, iff1, iff2, im, halted, ei_last, f_set;
+  uint32_t tstates;
+  uint8_t ula, hsr, dec;
+  uint8_t ay_register, ay[ 16 ];
+} ts2068_snap_t;
+
+void ts2068_snap_get( ts2068_snap_t *snap );
+
+/* Restore it as Fuse loads a snapshot: a soft reset (RAM kept: load HOME
+   RAM before or after), then port FE, the T-state, the Z80, ports F4 and
+   FF, and the AY, whose registers are taken as they are, unmasked, and
+   given to the sound. Frame counts and the FLASH phase are not part of
+   it, and an interrupt still to come from an EI just before is lost, as
+   in Fuse. */
+void ts2068_snap_set( const ts2068_snap_t *snap );
+
+/* SZX (zx-state) snapshots, as libspectrum writes them for a TS2068
+   (machine/szx.c). Save writes the machine as it is now, between frames,
+   into buf: uncompressed, TS2068_SZX_SIZE bytes; 0 if size is too
+   small. Load restores one, compressed or not; 0, or a TS2068_SZX_ error.
+   A snapshot with DOCK pages (a cartridge) can't be loaded: this machine
+   has no DOCK. After an error in the RAM pages, HOME RAM may be partly
+   loaded and the machine should be reset. */
+#define TS2068_SZX_SIZE ( 8 + 8 + 37 + 8 + 8 + 6 + 8 + 5 + 3 * ( 8 + 3 + 0x4000 ) + \
+                          8 + 18 + 8 + 2 + 8 + 2 )
+size_t ts2068_szx_save( uint8_t *buf, size_t size );
+int ts2068_szx_load( const uint8_t *buf, size_t len );
+
+#define TS2068_SZX_NOT_SZX      -1      /* no ZXST header, or not a TS2068 */
+#define TS2068_SZX_CORRUPT      -2      /* a chunk's length is wrong */
+#define TS2068_SZX_UNSUPPORTED  -3      /* DOCK pages, or a version before 1.1 */
+#define TS2068_SZX_INFLATE      -4      /* a compressed page didn't inflate */
+
 #endif /* TS2068_H */

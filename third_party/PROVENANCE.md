@@ -33,6 +33,7 @@ One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note a
 | `machine/sound/blipbuffer.c`, `blipbuffer.h` | `third_party/fuse-tspico` | `sound/blipbuffer.c`, `blipbuffer.h` | `a43958d` | LGPL-2.1-or-later (Shay Green's Blip_Buffer 0.4.0, in C by Gergely Szasz). Accuracy 32 bits with `uint64_t` resampled time, as Fuse's 64-bit builds have it |
 | `machine/sound/sound.c`, `sound.h` | `third_party/fuse-tspico` | `sound.c`, `sound/output_mixer.c` | `a43958d` | Cut to the TS2068: the TV speaker route, mono, default volumes, no main buffer, 100 ms Blip_Buffers |
 | `test/basic/sound.asm` | (ours) | | | The sound test ROM |
+| `machine/szx.c`, `tools/host/szx_resave.c`, `tools/host/compare_szx.py` | (ours) | | | SZX snapshots. The format is libspectrum's (`third_party/libspectrum`, `szx.c`), followed byte for byte but not copied; `szx_resave` links the reference libspectrum to check it |
 | `z80_jls/z80_jls.cpp`, `z80_jls/z80_jls.h` | `third_party/ZX-ESPectrum-IDF` | `src/Z80_JLS.cpp`, `include/Z80_JLS/z80.h` | `2a2c335` | GPL-3.0. ESPectrum's hooks removed (TR-DOS, tape traps, video, CPU loop); `step`, `takeINT` and the `z80_core.h` functions added. Not linked by default. See `z80_jls/README.md` |
 | `z80_jls/z80_jls_ops.h` | `third_party/ZX-ESPectrum-IDF` | `include/Z80_JLS/z80operations.h` (replaced) | `2a2c335` | Rewritten on `z80/z80_glue.h` |
 

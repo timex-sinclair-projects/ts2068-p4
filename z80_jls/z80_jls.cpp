@@ -6172,6 +6172,8 @@ void z80_get_regs(z80_regs_t *r) {
     r->i = Z80::getRegI(); r->r = Z80::getRegR();
     r->iff1 = Z80::isIFF1(); r->iff2 = Z80::isIFF2();
     r->im = Z80::getIM();
+    r->ei_last = Z80::isPendingEI();
+    r->f_set = 0;                           // Z80_JLS keeps Q to itself
 }
 
 void z80_set_regs(const z80_regs_t *r) {
@@ -6186,7 +6188,7 @@ void z80_set_regs(const z80_regs_t *r) {
     Z80::setRegI(r->i); Z80::setRegR(r->r);
     Z80::setIFF1(r->iff1); Z80::setIFF2(r->iff2);
     Z80::setIM(r->im == 2 ? Z80::IM2 : r->im == 1 ? Z80::IM1 : Z80::IM0);
-    Z80::setPendingEI(false);
+    Z80::setPendingEI(r->ei_last);
 }
 
 }

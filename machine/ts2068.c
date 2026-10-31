@@ -662,3 +662,54 @@ ts2068_get_state( ts2068_state_t *out )
   out->frame_tstate = tstates;
   out->dec = scld_dec; out->hsr = scld_hsr; out->border = ula_last_byte & 0x07;
 }
+
+/* ---- snapshots (machine/szx.c) ----------------------------------------- */
+
+void
+ts2068_snap_get( ts2068_snap_t *s )
+{
+  z80_regs_t r;
+
+  z80_get_regs( &r );
+  s->af = r.af; s->bc = r.bc; s->de = r.de; s->hl = r.hl;
+  s->af_ = r.af_; s->bc_ = r.bc_; s->de_ = r.de_; s->hl_ = r.hl_;
+  s->ix = r.ix; s->iy = r.iy; s->sp = r.sp; s->pc = r.pc; s->memptr = r.memptr;
+  s->i = r.i; s->r = r.r; s->iff1 = r.iff1; s->iff2 = r.iff2; s->im = r.im;
+  s->halted = r.halted; s->ei_last = r.ei_last; s->f_set = r.f_set;
+  s->tstates = tstates;
+  s->ula = ula_last_byte; s->hsr = scld_hsr; s->dec = scld_dec;
+  s->ay_register = ay.current_register;
+  memcpy( s->ay, ay.registers, sizeof( s->ay ) );
+}
+
+/* Fuse's snapshot_copy_from: machine_reset_from_snapshot, then the
+   modules' snapshot_from hooks (ula, z80, scld, ay), then memory_map */
+void
+ts2068_snap_set( const ts2068_snap_t *s )
+{
+  z80_regs_t r;
+  int i;
+
+  ts2068_reset( 0 );
+
+  port_write( 0xfe, s->ula );   /* ula_from_snapshot, at T-state 0 */
+  tstates = s->tstates;
+
+  r.af = s->af; r.bc = s->bc; r.de = s->de; r.hl = s->hl;
+  r.af_ = s->af_; r.bc_ = s->bc_; r.de_ = s->de_; r.hl_ = s->hl_;
+  r.ix = s->ix; r.iy = s->iy; r.sp = s->sp; r.pc = s->pc; r.memptr = s->memptr;
+  r.i = s->i; r.r = s->r; r.iff1 = s->iff1; r.iff2 = s->iff2; r.im = s->im;
+  r.halted = s->halted; r.ei_last = s->ei_last; r.f_set = s->f_set;
+  z80_set_regs( &r );
+
+  port_write( 0xf4, s->hsr );
+  scld_dec_write( s->dec );
+
+  ay.current_register = s->ay_register & 0x0f;
+  for( i = 0; i < 16; i++ ) {
+    ay.registers[ i ] = s->ay[ i ];
+    if( sound_enabled ) sound_ay_write( i, s->ay[ i ], 0 );
+  }
+
+  memory_map();
+}

@@ -17,6 +17,10 @@
 typedef struct {
   libspectrum_word af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc, memptr;
   libspectrum_byte i, r, iff1, iff2, im, halted;
+  /* As an SZX snapshot has them: the last instruction was EI (no
+     interrupt before the next), and it set F (Fuse's Q, which SCF and CCF
+     read). Set them after tstates, which ei_last is relative to. */
+  libspectrum_byte ei_last, f_set;
 } z80_regs_t;
 
 /* Set up the core's tables and register its events. Call once. */

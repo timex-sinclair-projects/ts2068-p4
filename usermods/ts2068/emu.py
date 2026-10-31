@@ -7,11 +7,16 @@
 #   emu.save(volume=20)              # change settings.json
 #   emu.settings()                   # -> dict
 #   emu.roms()                       # -> the files in ROMS/
+#   emu.save_snapshot("game")        # the running machine -> SNAPS/game.szx
+#   emu.load_snapshot("game")        # starts the machine first if need be
+#   emu.snapshots()                  # -> the files in SNAPS/
 #
 # On the card:
 #
 #   /TS2068/settings.json   rom, exrom, volume, sound
 #   /TS2068/ROMS/           ROM files
+#   /TS2068/SNAPS/          SZX snapshots (ts2068.snapshot); Fuse's load
+#                           too, if they need no DOCK cartridge
 #
 # rom names a file in ROMS/: a 16K HOME ROM, with exrom naming its 8K or
 # 16K EXROM, or a 32K file holding both, HOME first (as TSPICO-23.ROM
@@ -28,6 +33,7 @@ import ts2068
 
 SD = "/sd"
 DIR = SD + "/TS2068"
+SNAPS = DIR + "/SNAPS"
 DEFAULTS = {"rom": "tc2068-0.rom", "exrom": "tc2068-1.rom", "volume": 10, "sound": True}
 
 
@@ -92,6 +98,43 @@ def roms():
             return sorted(os.listdir(DIR + "/ROMS"))
         except OSError:
             return []
+
+
+def _szx(name):
+    return name if name.lower().endswith(".szx") else name + ".szx"
+
+
+def snapshots():
+    with _Card():
+        try:
+            return sorted(os.listdir(SNAPS))
+        except OSError:
+            return []
+
+
+def save_snapshot(name):
+    """The machine as it is now, between frames, to SNAPS/name.szx"""
+    data = ts2068.snapshot()
+    with _Card():
+        for d in (DIR, SNAPS):
+            try:
+                os.mkdir(d)
+            except OSError:
+                pass
+        with open(SNAPS + "/" + _szx(name), "wb") as f:
+            f.write(data)
+    return len(data)
+
+
+def load_snapshot(name, **overrides):
+    """Restore SNAPS/name.szx, starting the machine as start() does if it
+    isn't running. A snapshot holds no ROM: it runs on the settings' ROMs."""
+    with _Card():
+        with open(SNAPS + "/" + _szx(name), "rb") as f:
+            data = f.read()
+    if not ts2068.run_status()["running"]:
+        start(**overrides)
+    ts2068.load_snapshot(data)
 
 
 def _load(name):

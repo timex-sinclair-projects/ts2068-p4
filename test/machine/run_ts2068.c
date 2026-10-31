@@ -5,6 +5,7 @@
                 [--fuse-contention] [--state state.json]
                 [--screen screen.ppm] [--ram ram.bin] [--time] [--bench]
                 [--audio audio.raw [--rate 44100]]
+                [--load-szx in.szx] [--save-szx out.szx]
 
    --rom1 may be 8K or 16K. A 32K TS-Pico ROM can be given as --rom alone:
    its first half is HOME, its second the EXROM. No TS-Pico is attached,
@@ -12,7 +13,9 @@
    the benchmark's BASIC loop once the ROM has booted (basic_loop.c).
    --audio writes every frame's sound as raw 16-bit mono samples in the
    host's byte order, as Fuse's --automation-capture-audio writes into its
-   WAV. */
+   WAV. --load-szx restores a snapshot before the first frame (the ROMs
+   still come from --rom/--rom0/--rom1); --save-szx writes one after the
+   last (machine/szx.c). */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,6 +93,7 @@ main( int argc, char **argv )
 {
   const char *rom = NULL, *rom0 = NULL, *rom1 = NULL;
   const char *state = NULL, *screen = NULL, *ramfile = NULL, *audio = NULL;
+  const char *load_szx = NULL, *save_szx = NULL;
   FILE *audio_f = NULL;
   unsigned frames = 100, i;
   int rate = 44100;
@@ -110,6 +114,8 @@ main( int argc, char **argv )
     else if( !strcmp( a, "--ram" ) && v ) { ramfile = v; i++; }
     else if( !strcmp( a, "--audio" ) && v ) { audio = v; i++; }
     else if( !strcmp( a, "--rate" ) && v ) { rate = atoi( v ); i++; }
+    else if( !strcmp( a, "--load-szx" ) && v ) { load_szx = v; i++; }
+    else if( !strcmp( a, "--save-szx" ) && v ) { save_szx = v; i++; }
     else if( !strcmp( a, "--fuse-contention" ) ) cfg.fuse_dock_contention = 1;
     else if( !strcmp( a, "--time" ) ) timed = 1;
     else if( !strcmp( a, "--bench" ) ) bench = 1;
@@ -139,6 +145,14 @@ main( int argc, char **argv )
     if( !audio_f ) { perror( audio ); return 1; }
   }
 
+  if( load_szx ) {
+    size_t n;
+    unsigned char *s = load( load_szx, &n );
+    int err = ts2068_szx_load( s, n );
+    if( err ) { fprintf( stderr, "%s: can't load (%d)\n", load_szx, err ); return 1; }
+    free( s );
+  }
+
   t0 = clock();
   for( i = 0; i < frames; i++ ) {
     if( bench ) basic_loop_frame( i );
@@ -158,6 +172,13 @@ main( int argc, char **argv )
 
   if( state ) write_state( state, frames );
   if( screen ) write_screen( screen );
+  if( save_szx ) {
+    static uint8_t s[ TS2068_SZX_SIZE ];
+    size_t n = ts2068_szx_save( s, sizeof( s ) );
+    FILE *f = fopen( save_szx, "wb" );
+    if( !f || fwrite( s, 1, n, f ) != n ) { perror( save_szx ); return 1; }
+    fclose( f );
+  }
   if( ramfile ) {
     FILE *f = fopen( ramfile, "wb" );
     if( !f ) { perror( ramfile ); return 1; }

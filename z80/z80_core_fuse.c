@@ -24,6 +24,8 @@ z80_get_regs( z80_regs_t *r )
   r->ix = IX; r->iy = IY; r->sp = SP; r->pc = PC; r->memptr = z80.memptr.w;
   r->i = I; r->r = ( R7 & Z80_R7_MASK ) | ( R & Z80_R_LOWER_BITS );
   r->iff1 = IFF1; r->iff2 = IFF2; r->im = IM; r->halted = z80.halted;
+  r->ei_last = z80.interrupts_enabled_at == (libspectrum_signed_dword)tstates;
+  r->f_set = !!z80.q;
 }
 
 void
@@ -34,4 +36,7 @@ z80_set_regs( const z80_regs_t *r )
   IX = r->ix; IY = r->iy; SP = r->sp; PC = r->pc; z80.memptr.w = r->memptr;
   I = r->i; R = R7 = r->r;
   IFF1 = r->iff1; IFF2 = r->iff2; IM = r->im; z80.halted = r->halted;
+  /* Fuse's z80_from_snapshot */
+  z80.interrupts_enabled_at = r->ei_last ? (libspectrum_signed_dword)tstates : -1;
+  z80.q = r->f_set ? F : 0;
 }
