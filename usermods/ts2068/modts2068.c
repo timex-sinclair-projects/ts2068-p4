@@ -20,7 +20,7 @@
 //   ts2068.pico_trace(n)             # keep the next n TS-Pico bus frames;
 //   ts2068.pico_trace()              # -> them, 3 bytes each
 //   ts2068.osd(row, text, style=0)   # the side panel's menu rows (osd.py)
-//   ts2068.osd_tap()                 # -> (row, column) of a tap, or None
+//   ts2068.osd_tap()                 # -> (row, x) of a tap, or None
 //   ts2068.display_check()           # -> pixels differing from the machine
 //
 // The benchmark boots the ROM, types the fixed BASIC loop
@@ -372,7 +372,7 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     machine_ready = true;
     memcpy(font, (const uint8_t *)home.buf + ROM_FONT, sizeof(font));
     p4_keyboard_init((const uint8_t *)home.buf + ROM_FONT);
-    p4_osd_init((const uint8_t *)home.buf + ROM_FONT);
+    p4_osd_init();
     p4_display_set_side(side_draw);
     if (sound && ts2068_sound_init(SAMPLE_RATE)) {
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("sound"));
@@ -567,14 +567,14 @@ static mp_obj_t side_keyboard(mp_obj_t on_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(side_keyboard_obj, side_keyboard);
 
-// osd_tap() -> (row, column) of the last tap in the menu area not yet
-// taken, or None
+// osd_tap() -> (row, x) of the last tap in the menu area not yet taken,
+// x in pixels from its left edge, or None
 static mp_obj_t osd_tap(void) {
-    int row, col;
-    if (!p4_osd_tap(&row, &col)) {
+    int row, x;
+    if (!p4_osd_tap(&row, &x)) {
         return mp_const_none;
     }
-    mp_obj_t t[2] = { MP_OBJ_NEW_SMALL_INT(row), MP_OBJ_NEW_SMALL_INT(col) };
+    mp_obj_t t[2] = { MP_OBJ_NEW_SMALL_INT(row), MP_OBJ_NEW_SMALL_INT(x) };
     return mp_obj_new_tuple(2, t);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(osd_tap_obj, osd_tap);

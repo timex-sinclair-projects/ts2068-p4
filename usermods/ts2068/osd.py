@@ -5,7 +5,8 @@
 #   osd.start()                  # starts the machine (emu.start) if need be
 #
 # The rows and taps are ts2068.osd() and ts2068.osd_tap() (platform/
-# p4_osd.c); the files and settings are emu.py's. The main page:
+# p4_osd.c), in a proportional font, with taps in pixels; the files and
+# settings are emu.py's. The main page:
 #
 #   <the ROM>
 #   Load ROM          a ROM from /TS2068/ROMS, kept as the setting
@@ -13,7 +14,7 @@
 #   Save snapshot     to SNAPS, as SNAPnnn.szx, the next number free
 #   Reset             the machine started again from the settings
 #   Keyboard          pair a Bluetooth keyboard, or forget it (btkbd.py)
-#   Volume  -   10  +
+#   Vol   -   10   +
 #
 # A list page shows seven names at a time, with Back, up and down. The
 # bottom row is the status line; the keyboard's progress shows there as it
@@ -29,10 +30,10 @@ import emu
 import ts2068
 
 ROWS = 10
-COLS = 19
+CHARS = 40                              # ts2068.osd keeps this many
 PLAIN, INVERSE, BUTTON = 0, 1, 2
 LIST_ROWS = 7                           # rows 1-7 of a list page
-_VOLUME = " Volume  -  %3d  +"          # - at column 9, + at 17
+_VOLUME = "Vol\t-\t%d\t+"                # tab stops: - at x 92, + at 184
 
 _page = None                            # "main", "roms", "snaps" or "kbd"
 _items = []
@@ -42,26 +43,26 @@ _running = False
 
 
 def _row(r, text, style=PLAIN):
-    ts2068.osd(r, text[:COLS], style)
+    ts2068.osd(r, text[:CHARS], style)
 
 
 def _say(text):
     global _status
     _status = text
-    _row(ROWS - 1, " " + text)
+    _row(ROWS - 1, text)
 
 
 def _main():
     global _page
     _page = "main"
     s = emu.settings()
-    _row(0, " " + s["rom"], INVERSE)
+    _row(0, s["rom"], INVERSE)
     _row(1, "")
-    _row(2, "  Load ROM", BUTTON)
-    _row(3, "  Load snapshot", BUTTON)
-    _row(4, "  Save snapshot", BUTTON)
-    _row(5, "  Reset", BUTTON)
-    _row(6, "  Keyboard", BUTTON)
+    _row(2, "Load ROM", BUTTON)
+    _row(3, "Load snapshot", BUTTON)
+    _row(4, "Save snapshot", BUTTON)
+    _row(5, "Reset", BUTTON)
+    _row(6, "Keyboard", BUTTON)
     _row(7, _VOLUME % s["volume"])
     _row(8, "")
     _say(_status)
@@ -70,7 +71,7 @@ def _main():
 def _list(page, title, items):
     global _page, _items, _top
     _page, _items, _top = page, items, 0
-    _row(0, " " + title, INVERSE)
+    _row(0, title, INVERSE)
     _show_list()
 
 
@@ -78,10 +79,10 @@ def _show_list():
     for i in range(LIST_ROWS):
         n = _top + i
         if n < len(_items):
-            _row(1 + i, "  " + _items[n], BUTTON)
+            _row(1 + i, _items[n], BUTTON)
         else:
-            _row(1 + i, "  (none)" if n == 0 else "")
-    _row(8, " < Back   up  down")
+            _row(1 + i, "(none)" if n == 0 else "")
+    _row(8, "< Back\tUp\tDown")
     _say("%d-%d of %d" % (_top + 1 if _items else 0,
                           min(_top + LIST_ROWS, len(_items)), len(_items)))
 
@@ -110,7 +111,7 @@ def _next_snap_name():
     raise OSError("SNAPS is full")
 
 
-def _tap_main(row, col):
+def _tap_main(row, x):
     global _roms_found
     if row == 2:
         _roms_found = _roms()
@@ -133,9 +134,9 @@ def _tap_main(row, col):
     elif row == 7:
         s = emu.settings()
         v = s["volume"]
-        if 7 <= col <= 11:
+        if 70 <= x < 130:
             v = max(0, v - 5)
-        elif col >= 15:
+        elif x >= 160:
             v = min(100, v + 5)
         else:
             return
@@ -144,12 +145,12 @@ def _tap_main(row, col):
         _row(7, _VOLUME % v)
 
 
-def _tap_list(row, col):
+def _tap_list(row, x):
     global _top
     if row == 8:
-        if col < 9:
+        if x < 88:
             _main()
-        elif col < 14:
+        elif x < 134:
             _top = max(0, _top - LIST_ROWS)
             _show_list()
         elif _top + LIST_ROWS < len(_items):

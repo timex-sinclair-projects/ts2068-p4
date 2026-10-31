@@ -37,6 +37,12 @@ One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note a
 | `z80_jls/z80_jls.cpp`, `z80_jls/z80_jls.h` | `third_party/ZX-ESPectrum-IDF` | `src/Z80_JLS.cpp`, `include/Z80_JLS/z80.h` | `2a2c335` | GPL-3.0. ESPectrum's hooks removed (TR-DOS, tape traps, video, CPU loop); `step`, `takeINT` and the `z80_core.h` functions added. Not linked by default. See `z80_jls/README.md` |
 | `z80_jls/z80_jls_ops.h` | `third_party/ZX-ESPectrum-IDF` | `include/Z80_JLS/z80operations.h` (replaced) | `2a2c335` | Rewritten on `z80/z80_glue.h` |
 
+## Fonts
+
+| Our path | Source | Made by | License |
+|---|---|---|---|
+| `platform/p4_osd_font.h` | Aileron Regular (Sora Sagano), the font built into Pillow 12.1.1 (`ImageFont.load_default`) | `tools/host/make_osd_font.py`: ASCII 32-126 at 16 and 24 pixels, 4-bit bitmaps | CC0 1.0 |
+
 ## Facts taken from other sources
 
 No code is copied from these. `platform/p4_display.c`, `p4_audio.c` and `p4_touch.c` use their values (register writes, timings, pins), as noted at the top of the file.
