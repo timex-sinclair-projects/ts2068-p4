@@ -1,10 +1,10 @@
 # Run on the board (mpremote run tools/p4/zesarux_smoke.py, with
-# tools/p4/session.py at /session.py): the zesarux-smoke session
+# tools/p4/session.py at /p4/session.py, as install.py puts it): the zesarux-smoke session
 # (test/traces), the firmware's tools/emu/smoke.py step for step, on the
 # live machine. Keeps every TS-Pico bus frame and writes them to
-# /capture.bin; prints its checks as smoke.py does. Compare on the host:
+# /p4/capture.bin; prints its checks as smoke.py does. Compare on the host:
 #
-#   mpremote cp :/capture.bin capture.bin
+#   mpremote cp :/p4/capture.bin capture.bin
 #   python3 tools/host/compare_frames.py --timing capture.bin test/traces/zesarux-smoke.frames
 #
 # The flash and card must hold the trace's seed (test/traces/seeds/README.md).
@@ -90,7 +90,7 @@ check("/TAP/GAMES" in t, "and the Pico is in it")
 time.sleep(2)
 data = ts2068.pico_trace()
 ts2068.pico_trace(0)
-with open("/capture.bin", "wb") as f:
+with open("/p4/capture.bin", "wb") as f:
     f.write(data)
 print("frames", len(data) // 3)
 print("%s (%d checks)" % ("ALL PASS" if all(results) else "FAILURES", len(results)))

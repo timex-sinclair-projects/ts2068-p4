@@ -26,8 +26,8 @@ BUDGET_US = 16635                       # one 60.1145 Hz frame
 
 DEVICE = """
 import time, ts2068
-home = open('/roms/tc2068-0.rom', 'rb').read()
-ex = open('/roms/tc2068-1.rom', 'rb').read()
+home = open('/p4/roms/tc2068-0.rom', 'rb').read()
+ex = open('/p4/roms/tc2068-1.rom', 'rb').read()
 ts2068.bench(home, ex, %d, %d)
 del home, ex
 while ts2068.status()['state'] != 'done':

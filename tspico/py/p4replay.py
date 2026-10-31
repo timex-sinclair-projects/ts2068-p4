@@ -29,7 +29,7 @@ def run(name, telemetry=False, boot=True):
         ms = wait_ready()
         print("[p4replay] firmware ready after %d ms (import + boot: %d ms)"
               % (ms, time.ticks_diff(time.ticks_ms(), t0)))
-    with open("/traces/%s.bin" % name, "rb") as f:
+    with open("/p4/traces/%s.bin" % name, "rb") as f:
         frames = f.read()
     print("[p4replay] %s: %d frames" % (name, len(frames) // 3))
     p4bridge.replay(frames)

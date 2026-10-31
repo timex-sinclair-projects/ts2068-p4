@@ -3,24 +3,29 @@
 
     python3 tools/p4/install.py [--trace fuse-smoke] [--port PORT]
 
-Stages everything in a temporary folder, then copies it with mpremote:
+Stages everything in a temporary folder, then copies it with mpremote. The
+root is the TS-Pico's own flash, as the firmware sees it; ours is in /p4,
+which boot.py puts on the import path:
 
   /TS/*.mpy          the pinned firmware (firmware/src/TS), compiled by
                      ~/esp/micropython's mpy-cross (same bytecode version)
   /dev_extcmd.py     as pico_host has it on its path (identical to TS/extcmd)
   /config.ini        TELEMETRY on, as pico_host's build_root sets it
   /words.txt, /assets/*.tap   firmware/src (run firmware/tools/build-basic.sh first)
-  /p4host.py, /p4replay.py    tspico/py
-  /emu.py, /osd.py   usermods/ts2068: starts the TS2068 from the card, and
-                     the side panel's menu
-  /main.py           usermods/ts2068: both at power-on (unless /p4/noboot)
+  /boot.py           usermods/ts2068: /p4 on sys.path
+  /main.py           usermods/ts2068: the TS2068 and the menu at power-on
+                     (unless /p4/noboot)
+  /p4/emu.py, /p4/osd.py   usermods/ts2068: starts the TS2068 from the card,
+                     and the side panel's menu
+  /p4/p4host.py, /p4/p4replay.py, /p4/seed_sd.py   tspico/py
+  /p4/session.py     tools/p4: typing BASIC from scripts
   /p4/sd.json        the board's microSD (tools/p4/board.json)
   /p4/build.txt      the firmware commit, as pico_host shows it
-  /traces/*.bin      test/traces/*.frames, packed
+  /p4/traces/*.bin   test/traces/*.frames, packed
 
 --trace overlays that trace's seed flash files (test/traces/seeds/<name>/flash)
-and stages its card contents in /seed, which seed_sd.py (on the board) writes
-to a freshly formatted microSD.
+and stages its card contents in /p4/seed, which seed_sd.py (on the board)
+writes to a freshly formatted microSD.
 """
 
 import argparse
@@ -70,34 +75,36 @@ def stage(trace):
         if os.path.isdir(os.path.join(seed, "flash")):
             shutil.copytree(os.path.join(seed, "flash"), st, dirs_exist_ok=True)
         # The card's contents, for seed_sd.py to copy on the board (test/traces/seeds/README.md).
-        sd = os.path.join(st, "seed", "sd")
+        sd = os.path.join(st, "p4", "seed", "sd")
         os.makedirs(sd)
         if trace in SD_HELP:
             shutil.copytree(os.path.join(FW, "SD card", "help"), os.path.join(sd, "help"))
         if os.path.isdir(os.path.join(seed, "sd")):
             shutil.copytree(os.path.join(seed, "sd"), sd, dirs_exist_ok=True)
-        with open(os.path.join(st, "seed", "empty_dirs.txt"), "w") as f:
+        with open(os.path.join(st, "p4", "seed", "empty_dirs.txt"), "w") as f:
             f.write("".join(d + "\n" for d in EMPTY_DIRS.get(trace, ())))
+    p4 = os.path.join(st, "p4")
+    os.makedirs(p4, exist_ok=True)
     for name in ("p4host.py", "p4replay.py", "seed_sd.py"):
-        p = os.path.join(REPO, "tspico", "py", name)
-        if os.path.exists(p):
-            shutil.copy(p, st)
-    for name in ("emu.py", "osd.py", "main.py"):
+        shutil.copy(os.path.join(REPO, "tspico", "py", name), p4)
+    for name in ("emu.py", "osd.py"):
+        shutil.copy(os.path.join(REPO, "usermods", "ts2068", name), p4)
+    shutil.copy(os.path.join(REPO, "tools", "p4", "session.py"), p4)
+    for name in ("boot.py", "main.py"):
         shutil.copy(os.path.join(REPO, "usermods", "ts2068", name), st)
-    os.makedirs(os.path.join(st, "p4"))
     with open(os.path.join(REPO, "tools", "p4", "board.json")) as f:
         board = json.load(f)
     with open(os.path.join(st, "p4", "sd.json"), "w") as f:
         json.dump(board["sd"], f)
     with open(os.path.join(st, "p4", "build.txt"), "w") as f:
         f.write("%s (%s)\n" % (git("rev-parse", "--short", "HEAD"), git("rev-parse", "--abbrev-ref", "HEAD")))
-    os.makedirs(os.path.join(st, "traces"))
+    os.makedirs(os.path.join(st, "p4", "traces"))
     tdir = os.path.join(REPO, "test", "traces")
     for name in sorted(os.listdir(tdir)):
         if name.endswith(".frames"):
             with open(os.path.join(tdir, name)) as f:
                 data = pack_frames.pack(f.readlines())
-            with open(os.path.join(st, "traces", name[:-7] + ".bin"), "wb") as f:
+            with open(os.path.join(st, "p4", "traces", name[:-7] + ".bin"), "wb") as f:
                 f.write(data)
     return st, board
 
@@ -114,7 +121,9 @@ def main():
         return
     port = args.port or board["port"]
     mp = ["mpremote", "connect", port]
-    # Old firmware files first: a stale .py next to a new .mpy would win the import.
+    # Old firmware files first: a stale .py next to a new .mpy would win the
+    # import. Then what installs before /p4 had them left on the root. The
+    # rest of /p4 (noboot, roms, ...) stays.
     subprocess.run(mp + ["exec", "import os\n"
                          "def rm(p):\n"
                          "  try:\n"
@@ -123,7 +132,9 @@ def main():
                          "      os.rmdir(p)\n"
                          "    else: os.remove(p)\n"
                          "  except OSError: pass\n"
-                         "for p in ('/TS','/assets','/traces','/p4','/TMP','/seed'): rm(p)\n"], check=True)
+                         "for p in ('/TS','/assets','/TMP','/p4/traces','/p4/seed',\n"
+                         "          '/traces','/seed','/emu.py','/osd.py','/p4host.py','/p4replay.py',\n"
+                         "          '/seed_sd.py','/session.py'): rm(p)\n"], check=True)
     subprocess.run(mp + ["fs", "cp", "-r"] + [os.path.join(st, n) for n in sorted(os.listdir(st))] + [":"],
                    check=True)
     subprocess.run(mp + ["fs", "ls", ":"], check=True)

@@ -1,6 +1,6 @@
 # Make the board's microSD card exactly what a trace started from
-# (test/traces/seeds): FORMAT it (FAT), then copy /seed/sd/* onto it and make
-# the empty folders the seed lists. tools/p4/install.py --trace puts /seed
+# (test/traces/seeds): FORMAT it (FAT), then copy /p4/seed/sd/* onto it and make
+# the empty folders the seed lists. tools/p4/install.py --trace puts /p4/seed
 # on the flash.
 #
 #   import seed_sd; seed_sd.run()           # erases the card
@@ -41,9 +41,9 @@ def run():
     os.VfsFat.mkfs(sd)
     os.mount(sd, "/sd")
     try:
-        _copy("/seed/sd", "/sd")
+        _copy("/p4/seed/sd", "/sd")
         try:
-            with open("/seed/empty_dirs.txt") as f:
+            with open("/p4/seed/empty_dirs.txt") as f:
                 for line in f:
                     p = line.strip()
                     if p:

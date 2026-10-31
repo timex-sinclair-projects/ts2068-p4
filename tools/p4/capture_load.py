@@ -2,9 +2,9 @@
 # session (test/traces) on the live machine. Boots the TS-Pico ROM with the
 # firmware plugged in, types LOAD "" through ts2068.keys(), keeps every bus
 # frame (ts2068.pico_trace) until none have come for 5 s, and writes them
-# to /capture.bin, 3 bytes a frame. Then, on the host:
+# to /p4/capture.bin, 3 bytes a frame. Then, on the host:
 #
-#   mpremote cp :/capture.bin capture.bin
+#   mpremote cp :/p4/capture.bin capture.bin
 #   python3 tools/host/compare_frames.py --timing capture.bin test/traces/fuse-smoke.frames
 #
 # The flash and card must hold the trace's seed and nothing the firmware
@@ -43,6 +43,6 @@ while quiet < 50:
     last = n
 data = ts2068.pico_trace()
 ts2068.pico_trace(0)
-with open("/capture.bin", "wb") as f:
+with open("/p4/capture.bin", "wb") as f:
     f.write(data)
 print("frames", len(data) // 3)
