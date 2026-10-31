@@ -16,11 +16,34 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 | `machine/` | TS2068 machine, SCLD, paging and sound, lifted from Fuse (`machine.cmake`) |
 | `z80/` | Fuse's Z80 core (`z80.cmake`); `z80_jls/` is the one not chosen |
 | `tspico/` | `p4bridge` queues, and the Python that runs the firmware on the P4 |
-| `tools/` | `p4/`: install, card setup, sessions; `host/`: comparisons against Fuse |
+| `tools/` | `p4/`: install, card setup, sessions, the release downloads (`make_release.py`); `host/`: comparisons against Fuse |
 | `firmware/` | Submodule: tspico-firmware-build (pinned) |
 | `third_party/` | Read-only reference submodules; see [PROVENANCE.md](third_party/PROVENANCE.md) |
 | `docs/` | [DECISIONS.md](docs/DECISIONS.md), [NOTES.md](docs/NOTES.md) |
 | `test/` | Trace fixtures, Z80 suites, BASIC test programs |
+
+## Installing without building
+
+Each [release](https://github.com/timex-sinclair-projects/ts2068-p4/releases) has two downloads:
+
+- **`ts2068-p4-VERSION.zip`** holds `ts2068-p4-VERSION.bin`, the board's whole 16 MB flash: MicroPython with the emulator, the TS-Pico firmware, and the menu.
+- **`ts2068-p4-sd-VERSION.zip`** is the microSD card: the ROMs (the TS2068's own, and the TS-Pico's, which it starts with), and the TS-Pico's card files.
+
+You need [esptool](https://docs.espressif.com/projects/esptool/) (`pip install esptool`). Plug the panel's **UART** USB-C port into the computer; it shows up as a CH340 serial port (`/dev/cu.wchusbserial*` on a Mac, `/dev/ttyUSB*` on Linux, `COM*` on Windows).
+
+1. Optional, but the only way back to Elecrow's demo: save what's on the board now.
+   ```bash
+   esptool --chip esp32p4 --port PORT read-flash 0 0x1000000 crowpanel-factory.bin
+   ```
+2. Write the image. This replaces everything on the flash.
+   ```bash
+   esptool --chip esp32p4 --port PORT write-flash 0x0 ts2068-p4-VERSION.bin
+   ```
+3. Unzip the card zip onto a FAT32 microSD card, put it in the panel, and reset it. The TS2068 starts with the TS-Pico ROM.
+
+To pick another ROM, use **Load ROM** in the menu; ROM files go in `/TS2068/ROMS` on the card.
+
+Writing the whole image also clears a paired Bluetooth keyboard: pair it again from the menu.
 
 ## Getting the source
 
@@ -44,6 +67,8 @@ python3 tools/p4/sd_roms.py
 At power-on `main.py` starts the TS2068 from the card's `/TS2068` folder, with the TS-Pico firmware plugged in when the ROM is the 32K TS-Pico one, and puts the menu in the side panel above the on-screen keyboard (or in the whole side panel while a Bluetooth keyboard is connected). To boot to the REPL instead, create `/p4/noboot` on the flash.
 
 It needs MicroPython v1.29.0 and ESP-IDF v5.5.2 (docs/DECISIONS.md D3).
+
+The release downloads are made from a build with `uv run --with littlefs-python --with esptool tools/p4/make_release.py`, into `dist/`.
 
 **A Bluetooth keyboard:** tap **Keyboard → Pair a keyboard** in the menu with the keyboard in pairing mode. It's remembered, and reconnects at power-on when a key is pressed. The keys type what they say; Ctrl or Alt is SYMBOL SHIFT, Esc is BREAK, Tab is extended mode. BLE keyboards only: the C6 has no Bluetooth Classic. Pairing has no passkey for now (docs/DECISIONS.md D8).
 

@@ -455,6 +455,8 @@ The screen shows the counts, and the losses against the reference. The 256 bytes
 
 FRM gives 58688 T-states a frame (224 × 262), and the period of 56 (pad 14) loses nothing, as it should. On a TS2068, a different R40 row means a different pattern; zeros in EXR and DCK confirm the DOCK finding; and snow means the clock stop doesn't cover refresh. Not yet run on hardware.
 
+**Release downloads (2026-10-31).** `tools/p4/make_release.py` makes the two files each release carries, so the board can be set up without building. `ts2068-p4-VERSION.bin` is the whole 16 MB flash, for `esptool write-flash 0x0`: the bootloader, the partition table, MicroPython, and at 0x410000 the filesystem `install.py` stages, written as a littlefs image by `littlefs-python` with MicroPython's own settings (4096-byte blocks, read and prog 32, lookahead 32, on-disk version 2.1). It's 1.3 MB zipped. The card zip holds the TS-Pico's card files, plus `/TS2068` with tc2068-0/1 (Timex's software is public domain) and `TSPICO-23.ROM` (MIT), and a settings.json that starts with the TS-Pico ROM. Checked on the Mac: the bootloader, partition table and app in the image match the build byte for byte, and MicroPython v1.29's Unix port mounts the filesystem from it (34 files, 2947 of 3056 blocks free).
+
 **Still to do, not blocking (2026-10-31):**
 
 - **esp-hosted 2.7.0 against the C6's 2.12:** MicroPython v1.29 pins `espressif/esp_hosted` 2.7.0 and `esp_wifi_remote` 0.15.2 together in `ports/esp32/main/idf_component.yml`, so upgrading means changing MicroPython's tree. The link, BLE and Wi-Fi work; the boot log's version warning is advice. Left as it is.
