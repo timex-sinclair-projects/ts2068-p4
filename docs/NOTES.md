@@ -198,3 +198,32 @@ A real Z80 never needs either rule: BASIC takes milliseconds between LPRINT char
 - **The cost:** the core is all-static C++.
 - **Effort:** about 1–2 days to extract.
 - **Testing:** MEMPTR, Q and the undocumented flags are implemented, but the repo has no test results, so it needs `test/z80`'s suite.
+
+**The TS2068 machine is lifted and boots on the host (2026-10-30).** `machine/` is Fuse's TS2068, SCLD, paging, ports and contention, cut down into one file behind `machine/machine.h` (details in `machine/README.md`). `make -C test/machine compare` runs three ROMs here and in the reference fuse-tspico (`~/esp/ref`):
+
+- **The ROMs:** the stock TS2068 ROM, the TS-Pico ROM (`TSPICO-23.ROM`, split, with no TS-Pico attached), and `test/basic/dockhome.asm`.
+- **What's compared:** every Z80 register, R and the T-state within the frame, after 1, 2, 10, 50, 100, 300, 1,000 and 3,000 frames.
+- **Result:** all identical, and so is the part of the screen Fuse's PNG holds (below).
+- **Speed:** a frame takes about 80 µs on the Mac, `-O2`. That's no guide to the P4.
+
+**The DOCK-vs-HOME timing program (`test/basic/dockhome.asm`)** counts loop passes per frame with one access under test at 0x4000, and leaves the counts in registers. In loop passes per frame:
+
+| Test | Fuse | Ours, TS2068 contention |
+|---|---|---|
+| Read 0x4000, HOME RAM5 | 1332 | 1332 |
+| Read 0x4000, EXROM paged in | 1332 | 1396 |
+| Read 0x4000, DOCK paged in | 1332 | 1396 |
+| Read 0x8000 (uncontended reference) | 1396 | 1396 |
+| Run code at 0x4000, HOME | 1139 | 1139 |
+| Run code at 0x4000, EXROM | 1139 | 1396 |
+| IN from port 40FBh, HOME at 0x4000 | 1164 | 1164 |
+| IN from port 40FBh, EXROM at 0x4000 | 1164 | 1248 (uncontended) |
+
+With `fuse_dock_contention` set, ours matches Fuse's column exactly. On a real TS2068, the same ROM pair answers Q10's DOCK question: if DOCK and EXROM read 1396, they aren't contended. It needs a way to read the registers there; drawing the counts on screen would do.
+
+**Fuse's automation PNG is garbled on Timex machines.**
+
+- **The defect:** `automation/artifacts.c` captures the null UI's 640 × 480 framebuffer correctly, but then writes `screen.png` through Fuse's screenshot code with the "Double size" scaler. In the 1280 × 960 result, the left 640 pixels of each row hold only the left half of a line, and the right 640 repeat it two rows down. `test/traces/fuse-smoke.screen.png` shows it too.
+- **The workaround:** `compare_fuse.py` compares only the left border and the screen's left 16 columns.
+- **The fix,** in fuse-tspico, the user's fork: write the PNG from `screen_rgb`, the buffer it already captured. Not raised yet.
+

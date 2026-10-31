@@ -1,0 +1,634 @@
+/* ts2068.c: the Timex/Sinclair 2068 behind machine.h
+
+   Derived from Fuse (third_party/fuse-tspico, tag tspico-v1.10.0-1):
+   machines/ts2068.c and tc2068.c, peripherals/scld.c, ula.c and
+   sound/ay.c, machines/machines_periph.c, spectrum.c, machine.c, periph.c
+   and memory_pages.c.
+
+   Copyright (c) 1999-2021 Philip Kendall, Fredrick Meunier, Witold Filipczyk,
+                           Darren Salt
+   Copyright (c) 2015 Stuart Brady, Adrien Destugues
+   Copyright (c) 2026 the esp32-2068 contributors
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; either version 2 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License along
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+   What Fuse spreads over its module, periph and memory_page systems is
+   here in one file, cut to what the TS2068 has: 8K chunks paged by the
+   SCLD (port F4, and port FF bit 7), the ULA on port FE, the SCLD's
+   screen modes on port FF, the AY on F5/F6 with the joysticks on R14,
+   and the TS-Pico on 0E/0F. Behaviour is Fuse's except where marked
+   "Not Fuse". machine/README.md lists what is left out. */
+
+#include <string.h>
+
+#include "machine.h"
+#include "event.h"
+#include "z80.h"
+#include "z80_glue.h"
+
+/* Frame timings: libspectrum's timings_frame_timex_scld_60hz */
+#define LEFT_BORDER        24   /* T-states */
+#define HORIZONTAL_SCREEN  128
+#define INTERRUPT_LENGTH   32
+#define TOP_LEFT_PIXEL     9169 /* T-states after /INT */
+
+/* What Fuse shows of the border: 24 lines and 4 columns of 8 pixels */
+#define BORDER_LINES       24
+#define BORDER_COLS        4
+#define SCREEN_LINES       192
+
+/* When the top-left pixel of the shown border is drawn: Fuse's
+   machine->line_times[0], 3777 */
+#define LINE_TIMES_0 \
+  ( TOP_LEFT_PIXEL - BORDER_LINES * MACHINE_TSTATES_PER_LINE - 4 * BORDER_COLS )
+
+/* An instruction can run past the end of the frame before the frame
+   event is taken: room for the longest, contended */
+#define CONTENTION_SLACK   256
+
+/* The z80_glue.h state */
+libspectrum_dword tstates;
+libspectrum_dword z80_interrupt_length = INTERRUPT_LENGTH;
+int z80_int_disabled;
+
+/* z80_machine.h: whether each 8K chunk is contended now, and the delay
+   at each T-state of the frame (Fuse's ula_contention) */
+libspectrum_byte machine_contended[ 8 ];
+libspectrum_byte machine_contention[ MACHINE_TSTATES_PER_FRAME + CONTENTION_SLACK ];
+
+/* Memory. HOME: the 16K ROM, then RAM at 0x4000-0xFFFF (Fuse's RAM pages
+   5, 2 and 0); RAM5, the screen, is contended. EXROM: 8K, or 16K with
+   the even chunks seeing its first half and the odd ones its second.
+   DOCK: no cartridge, so it reads FFh. */
+static libspectrum_byte home_rom[ 0x4000 ];
+static libspectrum_byte ram[ 0xc000 ];
+static libspectrum_byte exrom[ 0x4000 ];
+static size_t exrom_size;
+static libspectrum_byte empty_chunk[ 0x2000 ];
+
+static const libspectrum_byte *read_map[ 8 ];
+static libspectrum_byte *write_map[ 8 ];   /* NULL: read-only */
+
+static int fuse_dock_contention;
+
+/* Ports */
+static libspectrum_byte scld_dec;          /* port FF */
+static libspectrum_byte scld_hsr;          /* port F4 */
+static libspectrum_byte ula_last_byte;     /* port FE */
+static libspectrum_byte ula_default_value;
+static libspectrum_byte keyboard[ 8 ];
+static libspectrum_byte joystick[ 2 ];
+
+static struct {
+  libspectrum_byte current_register;
+  libspectrum_byte registers[ 16 ];
+} ay;
+
+static const libspectrum_byte ay_mask[ 16 ] = {
+  0xff, 0x0f, 0xff, 0x0f, 0xff, 0x0f, 0x1f, 0xff,
+  0x1f, 0x1f, 0x1f, 0xff, 0xff, 0x0f, 0xff, 0xff,
+};
+
+static machine_tspico_fn tspico;
+static void *tspico_ctx;
+
+/* Frames */
+static int frame_event;
+static libspectrum_dword frame_count;
+static int flash_frame_count, flash_reversed;
+
+#define SCLD_ALTDFILE   0x01
+#define SCLD_EXTCOLOUR  0x02
+#define SCLD_HIRES      0x04
+#define SCLD_INTDISABLE 0x40
+#define SCLD_ALTMEMBANK 0x80
+
+#define ALTDFILE_OFFSET 0x2000
+
+/* ---- memory ------------------------------------------------------------ */
+
+/* Fuse's tc2068_memory_map: HOME everywhere, then the chunks whose HSR
+   bit is set from EXROM (DEC bit 7 set) or DOCK. Fuse marks DOCK and
+   EXROM at 0x4000-0x7FFF contended (scld_set_exrom_dock_contention).
+   Not Fuse: on the TS2068 only HOME RAM is contended, unless
+   fuse_dock_contention asks for Fuse's behaviour. */
+static void
+memory_map( void )
+{
+  int c;
+
+  for( c = 0; c < 8; c++ ) {
+    int screen_chunk = ( c == 2 || c == 3 );
+
+    if( scld_hsr & ( 1 << c ) ) {
+      if( scld_dec & SCLD_ALTMEMBANK )
+        read_map[ c ] = exrom +
+          ( exrom_size == 0x4000 && ( c & 1 ) ? 0x2000 : 0 );
+      else
+        read_map[ c ] = empty_chunk;
+      write_map[ c ] = NULL;
+      machine_contended[ c ] = fuse_dock_contention && screen_chunk;
+    } else if( c < 2 ) {
+      read_map[ c ] = home_rom + c * 0x2000;
+      write_map[ c ] = NULL;
+      machine_contended[ c ] = 0;
+    } else {
+      write_map[ c ] = ram + ( c - 2 ) * 0x2000;
+      read_map[ c ] = write_map[ c ];
+      machine_contended[ c ] = screen_chunk;
+    }
+  }
+}
+
+libspectrum_byte
+readbyte_internal( libspectrum_word address )
+{
+  return read_map[ address >> 13 ][ address & 0x1fff ];
+}
+
+libspectrum_byte
+readbyte( libspectrum_word address )
+{
+  if( machine_contended[ address >> 13 ] )
+    tstates += machine_contention[ tstates ];
+  tstates += 3;
+
+  return read_map[ address >> 13 ][ address & 0x1fff ];
+}
+
+void
+writebyte( libspectrum_word address, libspectrum_byte b )
+{
+  libspectrum_byte *chunk = write_map[ address >> 13 ];
+
+  if( machine_contended[ address >> 13 ] )
+    tstates += machine_contention[ tstates ];
+  tstates += 3;
+
+  if( chunk ) chunk[ address & 0x1fff ] = b;
+}
+
+/* ---- contention -------------------------------------------------------- */
+
+/* Fuse's spectrum_contend_delay_65432100 (contend_delay_common with
+   offset 1), which Fuse uses for the TS2068. Whether the SCLD contends
+   this way is unmeasured (PLAN.md §1.6, Q10a). */
+static libspectrum_byte
+contend_delay( libspectrum_dword time )
+{
+  static const libspectrum_byte pattern[ 8 ] = { 5, 4, 3, 2, 1, 0, 0, 6 };
+  int line, tstates_through_line;
+
+  line = (libspectrum_signed_dword)( time - LINE_TIMES_0 ) /
+         MACHINE_TSTATES_PER_LINE;
+
+  tstates_through_line = time - LINE_TIMES_0 +
+                         ( LEFT_BORDER - BORDER_COLS * 4 );
+  tstates_through_line %= MACHINE_TSTATES_PER_LINE;
+
+  if( line < BORDER_LINES || line >= BORDER_LINES + SCREEN_LINES ) return 0;
+  if( tstates_through_line < LEFT_BORDER - 1 ) return 0;
+  if( tstates_through_line >= LEFT_BORDER + HORIZONTAL_SCREEN - 1 ) return 0;
+
+  return pattern[ tstates_through_line % 8 ];
+}
+
+/* Fuse's ula_contend_port_early/late, with tc2048_port_from_ula: the
+   SCLD answers F4, FE and FF */
+static int
+port_from_scld( libspectrum_word port )
+{
+  port &= 0xff;
+  return port == 0xf4 || port == 0xfe || port == 0xff;
+}
+
+static void
+contend_port_early( libspectrum_word port )
+{
+  if( machine_contended[ port >> 13 ] )
+    tstates += machine_contention[ tstates ];
+  tstates++;
+}
+
+static void
+contend_port_late( libspectrum_word port )
+{
+  if( port_from_scld( port ) ) {
+    tstates += machine_contention[ tstates ]; tstates += 2;
+  } else if( machine_contended[ port >> 13 ] ) {
+    tstates += machine_contention[ tstates ]; tstates++;
+    tstates += machine_contention[ tstates ]; tstates++;
+    tstates += machine_contention[ tstates ];
+  } else {
+    tstates += 2;
+  }
+}
+
+/* ---- ports ------------------------------------------------------------- */
+
+static void
+scld_dec_write( libspectrum_byte b )
+{
+  libspectrum_byte old = scld_dec;
+
+  scld_dec = b;
+  z80_int_disabled = !!( b & SCLD_INTDISABLE );
+
+  /* Reenabled interrupts: a retriggered interrupt */
+  if( ( old & SCLD_INTDISABLE ) && !( b & SCLD_INTDISABLE ) )
+    z80_interrupt();
+
+  if( ( old ^ b ) & SCLD_ALTMEMBANK ) memory_map();
+}
+
+static libspectrum_byte
+keyboard_read( libspectrum_byte porth )
+{
+  libspectrum_byte data = 0xff;
+  int i;
+
+  for( i = 0; i < 8; i++, porth >>= 1 )
+    if( !( porth & 0x01 ) ) data &= keyboard[ i ];
+
+  return data;
+}
+
+static libspectrum_byte
+ay_registerport_read( void )
+{
+  int current = ay.current_register;
+
+  if( current == 14 )
+    return ay.registers[ 7 ] & 0x40 ? 0xbf & ay.registers[ 14 ] : 0xbf;
+  if( current == 15 && !( ay.registers[ 7 ] & 0x80 ) ) return 0xff;
+
+  return ay.registers[ current ] & ay_mask[ current ];
+}
+
+static libspectrum_byte
+tspico_access( libspectrum_word port, int out, libspectrum_byte b )
+{
+  int status = ( port & 0xff ) == 0x0f;
+  int op = out ? ( status ? MACHINE_TSPICO_OUT_STATUS : MACHINE_TSPICO_OUT_DATA )
+               : ( status ? MACHINE_TSPICO_IN_STATUS : MACHINE_TSPICO_IN_DATA );
+
+  return tspico ? tspico( op, b, tspico_ctx ) : 0xff;
+}
+
+/* Every TS2068 port is decoded on the low byte, and no two share one,
+   so Fuse's peripheral list is a switch. An unattached port reads FFh
+   (spectrum_unattached_port_none: the 2068 has no floating bus). */
+static libspectrum_byte
+port_read( libspectrum_word port )
+{
+  libspectrum_byte r;
+
+  switch( port & 0xff ) {
+
+  case 0xfe:
+    return ula_default_value & keyboard_read( port >> 8 );
+
+  case 0xf4:
+    return scld_hsr;
+
+  case 0xff:
+    return scld_dec;
+
+  case 0xf5:
+    if( ay.current_register == 14 ) return 0xff;
+    return ay_registerport_read();
+
+  case 0xf6:
+    if( ay.current_register != 14 ) return ay_registerport_read();
+    r = ay.registers[ 7 ] & 0x40 ? ay.registers[ 14 ] : 0xff;
+    if( port & 0x0100 ) r &= ~joystick[ 0 ];
+    if( port & 0x0200 ) r &= ~joystick[ 1 ];
+    return r;
+
+  case 0x0e: case 0x0f:
+    return tspico_access( port, 0, 0 );
+
+  default:
+    return 0xff;
+
+  }
+}
+
+static void
+port_write( libspectrum_word port, libspectrum_byte b )
+{
+  switch( port & 0xff ) {
+
+  case 0xfe:
+    ula_last_byte = b;
+    ula_default_value = 0x5f;   /* Fuse: machine_current->timex */
+    break;
+
+  case 0xf4:
+    scld_hsr = b;
+    memory_map();
+    break;
+
+  case 0xff:
+    scld_dec_write( b );
+    break;
+
+  case 0xf5:
+    ay.current_register = b & 0x0f;
+    break;
+
+  case 0xf6:
+    ay.registers[ ay.current_register ] = b & ay_mask[ ay.current_register ];
+    break;
+
+  case 0x0e: case 0x0f:
+    tspico_access( port, 1, b );
+    break;
+
+  }
+}
+
+libspectrum_byte
+readport( libspectrum_word port )
+{
+  libspectrum_byte b;
+
+  contend_port_early( port );
+  contend_port_late( port );
+  b = port_read( port );
+  tstates++;
+
+  return b;
+}
+
+void
+writeport( libspectrum_word port, libspectrum_byte b )
+{
+  contend_port_early( port );
+  port_write( port, b );
+  contend_port_late( port ); tstates++;
+}
+
+/* ---- frames ------------------------------------------------------------ */
+
+/* Fuse's spectrum_frame_event_fn and spectrum_frame */
+static void
+frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
+{
+  (void)event_tstates; (void)type; (void)user_data;
+
+  event_frame( MACHINE_TSTATES_PER_FRAME );
+  tstates -= MACHINE_TSTATES_PER_FRAME;
+  if( z80.interrupts_enabled_at >= 0 )
+    z80.interrupts_enabled_at -= MACHINE_TSTATES_PER_FRAME;
+
+  /* display_render_frame: FLASH swaps every 16 frames */
+  if( ++flash_frame_count == 16 ) {
+    flash_reversed = 1;
+  } else if( flash_frame_count == 32 ) {
+    flash_reversed = 0;
+    flash_frame_count = 0;
+  }
+
+  event_add( MACHINE_TSTATES_PER_FRAME, frame_event );
+  frame_count++;
+
+  z80_interrupt();
+}
+
+void
+machine_run_frame( void )
+{
+  libspectrum_dword frame = frame_count;
+
+  while( frame_count == frame ) {
+    z80_do_opcodes();
+    event_do_events();
+  }
+}
+
+libspectrum_dword
+machine_frame_count( void )
+{
+  return frame_count;
+}
+
+/* ---- setup ------------------------------------------------------------- */
+
+int
+machine_init( const machine_config_t *config )
+{
+  static int core_ready;
+  libspectrum_dword t;
+
+  if( !config->home_rom || !config->exrom ||
+      ( config->exrom_size != 0x2000 && config->exrom_size != 0x4000 ) )
+    return -1;
+
+  if( !core_ready ) {
+    z80_init( NULL );
+    frame_event = event_register( frame_event_fn, "End of frame" );
+    core_ready = 1;
+  }
+
+  memcpy( home_rom, config->home_rom, sizeof( home_rom ) );
+  memcpy( exrom, config->exrom, config->exrom_size );
+  exrom_size = config->exrom_size;
+  memset( empty_chunk, 0xff, sizeof( empty_chunk ) );
+  tspico = config->tspico;
+  tspico_ctx = config->tspico_ctx;
+  fuse_dock_contention = config->fuse_dock_contention;
+
+  for( t = 0; t < MACHINE_TSTATES_PER_FRAME; t++ )
+    machine_contention[ t ] = contend_delay( t );
+
+  memset( keyboard, 0xff, sizeof( keyboard ) );
+  memset( joystick, 0, sizeof( joystick ) );
+
+  machine_reset( 1 );
+  return 0;
+}
+
+/* Fuse's machine_select and machine_reset, with the TS2068's and the
+   modules' resets in the order Fuse runs them. Not Fuse: a hard reset
+   clears RAM (power-on); Fuse's RAM is only zero when it starts. */
+void
+machine_reset( int hard_reset )
+{
+  if( hard_reset ) memset( ram, 0, sizeof( ram ) );
+
+  event_reset();
+  tstates = 0;
+  event_add( MACHINE_TSTATES_PER_FRAME, frame_event );
+
+  scld_hsr = 0;
+  scld_dec = 0;
+  z80_int_disabled = 0;
+  ula_last_byte = 0;
+  ula_default_value = 0xff;
+  ay.current_register = 0;
+  memset( ay.registers, 0, sizeof( ay.registers ) );
+  memory_map();
+
+  z80_reset( hard_reset );
+
+  frame_count = 0;
+}
+
+/* ---- for the platform -------------------------------------------------- */
+
+libspectrum_byte
+machine_peek( libspectrum_word address )
+{
+  return readbyte_internal( address );
+}
+
+void
+machine_poke( libspectrum_word address, libspectrum_byte value )
+{
+  libspectrum_byte *chunk = write_map[ address >> 13 ];
+
+  if( chunk ) chunk[ address & 0x1fff ] = value;
+}
+
+libspectrum_byte *
+machine_home_ram( void )
+{
+  return ram;
+}
+
+void
+machine_set_keyboard( const libspectrum_byte rows[ 8 ] )
+{
+  memcpy( keyboard, rows, sizeof( keyboard ) );
+}
+
+void
+machine_set_joystick( int which, libspectrum_byte bits )
+{
+  joystick[ which & 1 ] = bits;
+}
+
+/* ---- the screen -------------------------------------------------------- */
+
+/* Fuse's display_write_if_dirty_timex and display_get_attr_byte, drawn
+   for the whole screen at once from the RAM and port FF as they are now. */
+
+static void
+parse_attr( libspectrum_byte attr, libspectrum_byte *ink,
+            libspectrum_byte *paper )
+{
+  if( ( attr & 0x80 ) && flash_reversed ) {
+    *ink = ( attr & ( 0x0f << 3 ) ) >> 3;
+    *paper = ( attr & 0x07 ) + ( ( attr & 0x40 ) >> 3 );
+  } else {
+    *ink = ( attr & 0x07 ) + ( ( attr & 0x40 ) >> 3 );
+    *paper = ( attr & ( 0x0f << 3 ) ) >> 3;
+  }
+}
+
+/* scld.c's hires_convert_dec: the attribute that HIRES's colour pair,
+   DEC bits 3-5, stands for */
+static libspectrum_byte
+hires_attr( void )
+{
+  static const libspectrum_byte attrs[ 8 ] = {
+    0x78, 0x71, 0x6a, 0x63, 0x5c, 0x55, 0x4e, 0x47
+  };
+  return attrs[ ( scld_dec >> 3 ) & 0x07 ];
+}
+
+static int
+line_start( int y )
+{
+  return ( ( y & 0xc0 ) << 5 ) | ( ( y & 0x07 ) << 8 ) | ( ( y & 0x38 ) << 2 );
+}
+
+static int
+attr_start( int y )
+{
+  return 0x1800 + 32 * ( y / 8 );
+}
+
+void
+machine_render( libspectrum_byte *pixels )
+{
+  const libspectrum_byte *screen = ram;         /* RAM5 */
+  int hires = !!( scld_dec & SCLD_HIRES );
+  libspectrum_byte border, ink, paper;
+  int x, y, i;
+
+  if( hires ) {
+    parse_attr( hires_attr(), &ink, &paper );
+    border = paper;
+  } else {
+    border = ula_last_byte & 0x07;
+  }
+  memset( pixels, border, MACHINE_SCREEN_WIDTH * MACHINE_SCREEN_HEIGHT );
+
+  for( y = 0; y < SCREEN_LINES; y++ ) {
+    libspectrum_byte *row = pixels +
+      ( y + BORDER_LINES ) * MACHINE_SCREEN_WIDTH + BORDER_COLS * 16;
+
+    for( x = 0; x < 32; x++ ) {
+      int offset = line_start( y ) + x +
+                   ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 );
+      libspectrum_byte data = screen[ offset ], data2, attr;
+      libspectrum_byte *p = row + x * 16;
+
+      if( hires ) {
+        switch( scld_dec & 0x07 ) {
+        case 0x05: data2 = screen[ attr_start( y ) + x + ALTDFILE_OFFSET ]; break;
+        case 0x06: data2 = screen[ offset + ALTDFILE_OFFSET ]; break;
+        case 0x07: data2 = data; break;
+        default:   data2 = screen[ attr_start( y ) + x ]; break;
+        }
+        parse_attr( hires_attr(), &ink, &paper );
+        for( i = 0; i < 8; i++ ) {
+          p[ i ] = data & ( 0x80 >> i ) ? ink : paper;
+          p[ 8 + i ] = data2 & ( 0x80 >> i ) ? ink : paper;
+        }
+      } else {
+        if( scld_dec & SCLD_EXTCOLOUR )
+          attr = screen[ line_start( y ) + x + ALTDFILE_OFFSET ];
+        else
+          attr = screen[ attr_start( y ) + x +
+                         ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 ) ];
+        parse_attr( attr, &ink, &paper );
+        for( i = 0; i < 8; i++ )
+          p[ 2 * i ] = p[ 2 * i + 1 ] = data & ( 0x80 >> i ) ? ink : paper;
+      }
+    }
+  }
+}
+
+/* ---- state ------------------------------------------------------------- */
+
+/* Last in the file: z80_macros.h defines the register names (A, PC, I...)
+   as macros. */
+#include "z80_macros.h"
+
+void
+machine_get_state( machine_state_t *out )
+{
+  out->af = AF; out->bc = BC; out->de = DE; out->hl = HL;
+  out->af_ = AF_; out->bc_ = BC_; out->de_ = DE_; out->hl_ = HL_;
+  out->ix = IX; out->iy = IY; out->sp = SP; out->pc = PC;
+  out->i = I; out->r = ( R7 & 0x80 ) | ( R & 0x7f );
+  out->iff1 = IFF1; out->iff2 = IFF2; out->im = IM;
+  out->halted = z80.halted;
+  out->frame_tstate = tstates;
+  out->dec = scld_dec; out->hsr = scld_hsr; out->border = ula_last_byte & 0x07;
+}
