@@ -13,6 +13,7 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 | `z80_machine.h` | The contention macros `z80_glue.h` asks for: Fuse's, keyed on one flag per 8K chunk |
 | `event.c`, `event.h` | Fuse's event queue semantics (time, then type; a new event before an equal one) in a fixed array, without glib |
 | `szx.c` | SZX snapshots, written new: the chunks libspectrum writes for a TS2068 (no code from it), saved uncompressed, loaded compressed or not (zlib on the host, the ROM's miniz on the P4). `ts2068_snap_get`/`ts2068_snap_set` in `ts2068.c` restore the state in the order Fuse's `snapshot_copy_from` does |
+| `machine.cmake` | The CMake library `ts2068_machine` for the P4 build (it brings in `z80/z80.cmake`), and the P4's two options; the host tests use `test/machine/Makefile` |
 | `sound/` | The sound (DECISIONS.md D7): Fuse's `sound/ay_engine.c`, `blipbuffer.c`, `tv_filter.c` and `ula_filter.c`, with includes adjusted, and `sound.c`, the part of Fuse's `sound.c` and `sound/output_mixer.c` a TS2068 uses (the TV speaker route, mono). `ts2068_sound_init` and `ts2068_sound_samples` in `machine.h` are the platform's view of it |
 
 ## How it differs from Fuse

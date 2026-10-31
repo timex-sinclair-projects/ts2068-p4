@@ -18,6 +18,7 @@ Frank Cringle's exercisers pass too (`make -C test/z80 zex`, 2026-10-30): zexdoc
 | `z80_core.h` | ours | What the machine and tests call a core through: init, reset, run, interrupt, end of frame, registers. Both cores implement it |
 | `z80_core_fuse.c` | ours | `z80_core.h`'s `z80_frame`, `z80_get_regs`, `z80_set_regs` and `z80_core_name` for this core (the rest are Fuse's own functions) |
 | `core.mk` | ours | Picks the core for the host test Makefiles: `CORE=fuse` (default) or `CORE=jls` |
+| `z80.cmake` | ours | The same for CMake builds (the P4): the library `ts2068_z80`, Fuse's core unless `TS2068_CORE=jls` |
 | `z80_glue.h` | ours | Everything the core needs from outside: the clock, events, memory and I/O, contention, the /INT line, and the tape and SLT traps compiled out |
 
 `compat/libspectrum.h` (ours) supplies the libspectrum integer types and allocation macros, in place of the generated real one.

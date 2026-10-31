@@ -8,12 +8,13 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 
 | Path | Contents |
 |---|---|
-| `main/` | `app_main`, task and core setup |
 | `boards/` | `CROWPANEL_P4_7`, the MicroPython board this is built as (a 4 MB app partition) |
-| `platform/` | P4 display, audio, touch, keyboard, storage |
-| `machine/` | TS2068 machine, SCLD and paging (lifted from Fuse) |
-| `z80/` | Z80 core (chosen in Phase 2) |
-| `tspico/` | Bridge hook and `p4bridge` queues |
+| `usermods/` | The MicroPython modules that join the layers: `ts2068` (the machine on the panel, plus `emu.py`, `osd.py`, `main.py`) and `p4bridge`. `usermods/micropython.cmake` is the build's entry point |
+| `platform/` | P4 display, audio, touch, on-screen keyboard, menu area (`platform.cmake`) |
+| `machine/` | TS2068 machine, SCLD, paging and sound, lifted from Fuse (`machine.cmake`) |
+| `z80/` | Fuse's Z80 core (`z80.cmake`); `z80_jls/` is the one not chosen |
+| `tspico/` | `p4bridge` queues, and the Python that runs the firmware on the P4 |
+| `tools/` | `p4/`: install, card setup, sessions; `host/`: comparisons against Fuse |
 | `firmware/` | Submodule: tspico-firmware-build (pinned) |
 | `third_party/` | Read-only reference submodules; see [PROVENANCE.md](third_party/PROVENANCE.md) |
 | `docs/` | [DECISIONS.md](docs/DECISIONS.md), [NOTES.md](docs/NOTES.md) |
