@@ -11,6 +11,7 @@ Stages everything in a temporary folder, then copies it with mpremote:
   /config.ini        TELEMETRY on, as pico_host's build_root sets it
   /words.txt, /assets/*.tap   firmware/src (run firmware/tools/build-basic.sh first)
   /p4host.py, /p4replay.py    tspico/py
+  /emu.py            usermods/ts2068/emu.py: starts the TS2068 from the card
   /p4/sd.json        the board's microSD (tools/p4/board.json)
   /p4/build.txt      the firmware commit, as pico_host shows it
   /traces/*.bin      test/traces/*.frames, packed
@@ -79,6 +80,7 @@ def stage(trace):
         p = os.path.join(REPO, "tspico", "py", name)
         if os.path.exists(p):
             shutil.copy(p, st)
+    shutil.copy(os.path.join(REPO, "usermods", "ts2068", "emu.py"), st)
     os.makedirs(os.path.join(st, "p4"))
     with open(os.path.join(REPO, "tools", "p4", "board.json")) as f:
         board = json.load(f)

@@ -9,6 +9,7 @@ The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on 
 | Path | Contents |
 |---|---|
 | `main/` | `app_main`, task and core setup |
+| `boards/` | `CROWPANEL_P4_7`, the MicroPython board this is built as (a 4 MB app partition) |
 | `platform/` | P4 display, audio, touch, keyboard, storage |
 | `machine/` | TS2068 machine, SCLD and paging (lifted from Fuse) |
 | `z80/` | Z80 core (chosen in Phase 2) |

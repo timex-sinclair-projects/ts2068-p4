@@ -124,7 +124,7 @@ Traces are in `test/traces/` (see its README).
 - **Peripherals:** EK79007 MIPI-DSI panel, backlight PWM GPIO31; GT911 touch (I2C SDA 45, SCL 46, RST 40, INT 42; 0x5D or 0x14); LCD reset GPIO41; two NS4168 I2S amps (LRCLK 21, BCLK 22, DATA 23, enable GPIO30, active low); PDM mic (CLK 24, DATA 26).
 
 **MicroPython with p4bridge** (D4): built with
-`make BOARD=ESP32_GENERIC_P4 BOARD_VARIANT=PRE_REV3_C6_WIFI USER_C_MODULES=<repo>/usermods/micropython.cmake` in `~/esp/micropython/ports/esp32`. App 1,776,016 bytes (255,600 left). FreeRTOS tick is 100 Hz (`CONFIG_FREERTOS_HZ=100`), and the idle-task watchdog is off on both cores, so a spinning task on core 0 is allowed. A user module's qstrs must not clash with frozen ones: a dict key named `n` broke the build (`redeclaration of enumerator 'MP_QSTR_n'`).
+`make BOARD=ESP32_GENERIC_P4 BOARD_VARIANT=PRE_REV3_C6_WIFI USER_C_MODULES=<repo>/usermods/micropython.cmake` in `~/esp/micropython/ports/esp32` (since 2026-10-31, `BOARD_DIR=<repo>/boards/CROWPANEL_P4_7` instead: Phase 3, "Our own board"). App 1,776,016 bytes (255,600 left). FreeRTOS tick is 100 Hz (`CONFIG_FREERTOS_HZ=100`), and the idle-task watchdog is off on both cores, so a spinning task on core 0 is allowed. A user module's qstrs must not clash with frozen ones: a dict key named `n` broke the build (`redeclaration of enumerator 'MP_QSTR_n'`).
 
 Checked from the REPL: HELLO → 1; Y reads 00 after an `OUT`; RX words 0x55 and 0x103 (port 0Fh); `put(b"AB")` and `put(0x143)` → `IN 0Eh` reads 41, 42, 43; an empty `IN 0Eh` reads 00 after 49 ms and counts an underrun. 1,000 status frames from Python take 14 ms (14 µs each, most of it the Python call).
 
@@ -355,3 +355,24 @@ DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS
   - `p4_display` has a side-panel hook: it calls the keyboard for the buffer it's drawing into, and flips even when the TS2068's picture hasn't changed if the keys shown differ. The keyboard keeps which keys each of the three buffers shows, and redraws only those that changed.
 - **Cost:** reading the touches takes 0.19 ms a frame on average, 0.57 ms at most. The first three frames draw the whole keyboard into each buffer (a worst frame of 18.9 ms, covered by the audio buffer: no underruns).
 - **Space:** `micropython.bin` is 0x1df5e0 of 0x1f0000 (97%), 67 KB free.
+
+**Our own board: a 4 MB app partition (2026-10-31).** The image had reached 97% of MicroPython's 1.94 MB app partition. `boards/CROWPANEL_P4_7` is MicroPython's `ESP32_GENERIC_P4` with the `PRE_REV3_C6_WIFI` variant, included from the port, plus its own `partitions.csv`. The resulting sdkconfig differs from the generic build's only in the partition table.
+
+- **Build:** in `~/esp/micropython/ports/esp32`,
+  `make BOARD_DIR=<repo>/boards/CROWPANEL_P4_7 USER_C_MODULES=<repo>/usermods/micropython.cmake -j8`. The build directory is `build-CROWPANEL_P4_7`.
+- **Partitions:** nvs and phy_init as before; the app is 4 MB at 0x10000. MicroPython adds `vfs` from 0x410000 to the end of the flash, 11.9 MB (it was 14 MB). The image is 0x1df5c0, leaving 2.1 MB (53%).
+- **The partition path:** sdkconfig names the table relative to the port directory, which can't reach a board outside it. `mpconfigboard.cmake` writes the absolute path into a sdkconfig fragment at configure time; IDF takes absolute paths as they are.
+- **Moving to it wipes the filesystem,** since `vfs` now starts at a different place. Done once: copied the 36 files (298,612 bytes) to `backups/vfs-2026-10-31/` with `mpremote cp -r :/ .` (1.5 minutes), flashed `partition_table/partition-table.bin` at 0x8000 and the app at 0x10000 (the bootloader is unchanged), and copied them back. Every file's SHA-256 matched the backup.
+- **Flash from now on:**
+  `esptool --chip esp32p4 --port /dev/cu.wchusbserial10 --baud 230400 write-flash 0x10000 build-CROWPANEL_P4_7/micropython.bin`
+  (add `0x8000 build-CROWPANEL_P4_7/partition_table/partition-table.bin` on a board still on the old table).
+
+**The microSD card (2026-10-31):** about 1 GB, FAT, holding only `TAP/` from the trace seed (`seed_sd.py`). `machine.SDCard` with `/p4/sd.json` (slot 0, 1-bit, 10 MHz) opens it in 37 ms.
+
+**ROMs and settings from the card (2026-10-31).** `import emu; emu.start()` boots the TS2068 from the card's `TS2068` folder.
+
+- **On the card:** `/TS2068/settings.json` (`rom`, `exrom`, `volume`, `sound`; missing keys take `emu.DEFAULTS`: the stock pair, volume 10, sound on) and `/TS2068/ROMS/`. A `rom` of 32K holds HOME then EXROM, as `TSPICO-23.ROM` does, and `exrom` is then ignored.
+- **The TS-Pico's card too:** the TS-Pico firmware lists only `/TAP` (David Anderson, 2026-10-31), so the `TS2068` folder never shows in its menus. `emu.py` mounts the card only while it reads, and unmounts it before the machine starts, so the firmware can mount it itself.
+- **Getting ROMs there:** `python3 tools/p4/sd_roms.py [FILE ...]` mounts the card through mpremote and copies the files to `/TS2068/ROMS`; with no files, the stock pair and `TSPICO-23.ROM`. mpremote's chained commands need `+` between them to share one session (and so the mount). `tools/p4/install.py` now puts `emu.py` on the flash.
+- **Checked on the panel:** `emu.start()` reads the settings and ROMs in 0.46 s, and both the stock pair and the TS-Pico ROM run (no late frames). The first run after a boot had one underrun at start-up; the second had none.
+- `emu.save(**changes)` updates `settings.json`, `emu.settings()` reads it, and `emu.roms()` lists `ROMS/`.

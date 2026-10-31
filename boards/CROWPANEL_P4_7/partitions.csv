@@ -1,0 +1,7 @@
+# CROWPANEL_P4_7, 16 MB flash: MicroPython's partitions-4MiBplus.csv with
+# the app partition at 4 MB. MicroPython adds a "vfs" partition from the
+# end of the app to the end of the flash, 0x410000-0x1000000 (11.9 MB).
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x400000,
