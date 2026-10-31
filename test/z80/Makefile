@@ -1,27 +1,28 @@
-# Fuse's Z80 core tester, against the lifted core in z80/.
-#   make -C test/z80 check     # runs tests.in and compares with tests.expected
-#   make -C test/z80 zex       # zexdoc and zexall (minutes)
+# Z80 core tests, on either core (z80/core.mk: CORE=fuse, the default, or jls).
+#   make -C test/z80 check     # Fuse's coretest: tests.in against tests.expected
+#   make -C test/z80 zex       # zexdoc and zexall (a minute or so)
 ROOT := ../..
 CFLAGS ?= -O2 -Wall
-CPPFLAGS := -DCORETEST -DHAVE_ENOUGH_MEMORY -I$(ROOT)/compat -I$(ROOT)/z80 -I$(ROOT)
-SRC := coretest.c $(ROOT)/z80/z80.c $(ROOT)/z80/z80_ops.c
+JLS_CPPFLAGS := -DCORETEST
+include $(ROOT)/z80/core.mk
+CPPFLAGS := -DCORETEST $(CORE_CPPFLAGS)
 
-coretest: $(SRC) $(wildcard $(ROOT)/z80/*.h $(ROOT)/z80/*.c)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $(SRC)
+coretest$(SUFFIX): coretest.c $(CORE_DEPS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ coretest.c $(CORE_SRC)
 
-zexrun: zexrun.c $(wildcard $(ROOT)/z80/*.h $(ROOT)/z80/*.c)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ zexrun.c $(ROOT)/z80/z80.c $(ROOT)/z80/z80_ops.c
+zexrun$(SUFFIX): zexrun.c $(CORE_DEPS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ zexrun.c $(CORE_SRC)
 
-# Frank Cringle's exercisers (zex/README.md): a few minutes each
-zex: zexrun
-	./zexrun zex/zexdoc.com
-	./zexrun zex/zexall.com
+# Frank Cringle's exercisers (zex/README.md)
+zex: zexrun$(SUFFIX)
+	./zexrun$(SUFFIX) zex/zexdoc.com
+	./zexrun$(SUFFIX) zex/zexall.com
 
-check: coretest
-	./coretest tests.in > tests.out
-	diff -u tests.expected tests.out && echo "coretest: PASS"
+check: coretest$(SUFFIX)
+	./coretest$(SUFFIX) tests.in > tests$(SUFFIX).out
+	diff -u tests.expected tests$(SUFFIX).out && echo "coretest ($(CORE)): PASS"
 
 clean:
-	rm -f coretest tests.out zexrun
+	rm -f coretest coretest-jls zexrun zexrun-jls tests.out tests-jls.out jls-*.o
 
 .PHONY: check zex clean

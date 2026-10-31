@@ -35,7 +35,7 @@
 
 #include "machine.h"
 #include "event.h"
-#include "z80.h"
+#include "z80_core.h"
 #include "z80_glue.h"
 
 /* Frame timings: libspectrum's timings_frame_timex_scld_60hz */
@@ -391,8 +391,7 @@ frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
 
   event_frame( TS2068_TSTATES_PER_FRAME );
   tstates -= TS2068_TSTATES_PER_FRAME;
-  if( z80.interrupts_enabled_at >= 0 )
-    z80.interrupts_enabled_at -= TS2068_TSTATES_PER_FRAME;
+  z80_frame( TS2068_TSTATES_PER_FRAME );
 
   /* display_render_frame: FLASH swaps every 16 frames */
   if( ++flash_frame_count == 16 ) {
@@ -616,19 +615,18 @@ ts2068_render( libspectrum_byte *pixels )
 
 /* ---- state ------------------------------------------------------------- */
 
-/* Last in the file: z80_macros.h defines the register names (A, PC, I...)
-   as macros. */
-#include "z80_macros.h"
-
 void
 ts2068_get_state( ts2068_state_t *out )
 {
-  out->af = AF; out->bc = BC; out->de = DE; out->hl = HL;
-  out->af_ = AF_; out->bc_ = BC_; out->de_ = DE_; out->hl_ = HL_;
-  out->ix = IX; out->iy = IY; out->sp = SP; out->pc = PC;
-  out->i = I; out->r = ( R7 & 0x80 ) | ( R & 0x7f );
-  out->iff1 = IFF1; out->iff2 = IFF2; out->im = IM;
-  out->halted = z80.halted;
+  z80_regs_t r;
+
+  z80_get_regs( &r );
+  out->af = r.af; out->bc = r.bc; out->de = r.de; out->hl = r.hl;
+  out->af_ = r.af_; out->bc_ = r.bc_; out->de_ = r.de_; out->hl_ = r.hl_;
+  out->ix = r.ix; out->iy = r.iy; out->sp = r.sp; out->pc = r.pc;
+  out->i = r.i; out->r = r.r;
+  out->iff1 = r.iff1; out->iff2 = r.iff2; out->im = r.im;
+  out->halted = r.halted;
   out->frame_tstate = tstates;
   out->dec = scld_dec; out->hsr = scld_hsr; out->border = ula_last_byte & 0x07;
 }

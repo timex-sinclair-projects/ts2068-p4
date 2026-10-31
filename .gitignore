@@ -23,3 +23,7 @@ test/z80/tests.out
 test/machine/run_ts2068
 test/basic/*.rom
 test/z80/zexrun
+test/z80/coretest-jls
+test/z80/tests-jls.out
+test/z80/zexrun-jls
+test/machine/run_ts2068-jls

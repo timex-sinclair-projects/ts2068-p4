@@ -1,6 +1,6 @@
 # machine
 
-The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifted from fuse-tspico (`third_party/fuse-tspico`, tag `tspico-v1.10.0-1`), GPL-2.0-or-later. It runs on the Z80 core in `z80/`, through `z80/z80_glue.h`. DOCK and EXROM pages are never contended here (PLAN.md §3, "Contention"), unless a config asks for Fuse's behaviour so the two can be compared.
+The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifted from fuse-tspico (`third_party/fuse-tspico`, tag `tspico-v1.10.0-1`), GPL-2.0-or-later. It runs on the Z80 core in `z80/` (DECISIONS.md D5), through `z80/z80_core.h` and `z80/z80_glue.h`. It also runs unchanged on Z80_JLS (`z80_jls/`), the core that wasn't chosen. DOCK and EXROM pages are never contended here (PLAN.md §3, "Contention"), unless a config asks for Fuse's behaviour so the two can be compared.
 
 **Checked (2026-10-30):** `make -C test/machine compare` boots three ROMs here and in fuse-tspico and compares every Z80 register, R, the T-state within the frame, and the screen, after 1 to 3,000 frames. The three ROMs are the stock TS2068 ROM, the TS-Pico ROM (`firmware/src/rom/TSPICO-23.ROM`) and the contention test (`test/basic/dockhome.asm`). All match. With the TS2068's own contention, the contention test differs from Fuse in exactly the four cases that touch DOCK or EXROM at 0x4000, and those run at the uncontended speed. On the host (Apple silicon, `-O2`) a frame takes about 80 µs. On the P4's core 0 a frame takes 2.5 ms, 15% of a 60 Hz frame (docs/NOTES.md, "P4 benchmark").
 

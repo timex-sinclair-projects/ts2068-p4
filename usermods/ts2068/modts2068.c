@@ -24,6 +24,7 @@
 
 #include "basic_loop.h"
 #include "machine.h"
+#include "z80_core.h"
 
 #define BENCH_CORE 0
 #define BENCH_PRIORITY 5
@@ -120,10 +121,12 @@ static void store(mp_obj_t d, qstr k, mp_obj_t v) {
 // (time spent in frames before and from `start`), min_us, max_us,
 // over_budget, hist (1 ms buckets); when done, ram_hash, pc, frame_tstate.
 // ram_internal: whether the emulated RAM is in the P4's internal memory.
+// z80: which Z80 core this image has ("fuse" or "jls").
 static mp_obj_t status(void) {
     static const qstr states[] = { MP_QSTR_idle, MP_QSTR_running, MP_QSTR_done };
     mp_obj_t d = mp_obj_new_dict(0);
     store(d, MP_QSTR_state, MP_OBJ_NEW_QSTR(states[b.state]));
+    store(d, MP_QSTR_z80, mp_obj_new_str(z80_core_name, strlen(z80_core_name)));
     store(d, MP_QSTR_frame, mp_obj_new_int_from_uint(b.frame));
     store(d, MP_QSTR_frames, mp_obj_new_int_from_uint(b.frames));
     store(d, MP_QSTR_start, mp_obj_new_int_from_uint(b.start));

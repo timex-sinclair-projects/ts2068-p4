@@ -51,3 +51,36 @@ What was decided, why, and what was ruled out (PLAN.md §5). Newest last.
 **Hazard found:** `firmware/src/TS/tspico_io.py` writes RP2040 PIO registers (`0x502000D8`, …) through `machine.mem32` whenever `mem32` exists and `tsbus` doesn't. MicroPython on the P4 has `machine.mem32`, so the firmware must **never** be imported on the P4 without the `machine` stand-in in place. Upstream, a P4 board needs to switch that path off explicitly.
 
 **Ruled out for now:** approach B (embedding MicroPython in our own ESP-IDF app). A gave us core pinning and our own C tasks without trouble, so there's no reason to switch yet.
+
+## D5. Z80 core: Fuse's (2026-10-30)
+
+**Decided:** the emulator runs on **Fuse's Z80 core** (`z80/`). Z80_JLS (`z80_jls/`) stays in the tree behind the same interface, so the comparison can be rerun, but nothing links it by default.
+
+**How they were compared:** both cores sit behind `z80/z80_core.h` and reach the machine only through `z80/z80_glue.h`. The machine, `coretest`, `zexrun` and the P4 benchmark are the same code on either; `make CORE=jls` (host) and `TS2068_CORE=jls` (P4 build) pick Z80_JLS. Z80_JLS is ESPectrum v1.4.15's `Z80_JLS.cpp` with its ESPectrum hooks taken out (z80_jls/README.md); its instructions are unchanged.
+
+| | Fuse | Z80_JLS |
+|---|---|---|
+| P4 frame, BASIC loop (core 0, 2,500 frames) | **2,511 µs** (15% of 16,635) | 2,928 µs (18%) |
+| P4 boot frames | 2,334 µs | 2,865 µs |
+| Host frame (Apple silicon, `-O2`) | **42 µs** | 49 µs |
+| zexdoc, host | **32 s** | 40 s |
+| zexdoc / zexall | 67/67, 67/67 | 67/67, 67/67 |
+| `coretest` against Fuse's expected results | 1,356/1,356 | 1,345/1,356 |
+| Machine against fuse-tspico, 3 ROMs, 1–3,000 frames | match | match |
+| RAM after the P4 benchmark | same as host | same as host |
+| App image | 0x1ccfe0 | 0x1bff70 (53 KB smaller) |
+| License | GPL-2.0-or-later | GPL-3.0 |
+
+Both P4 runs used the same board, the same day, and the same machine code, with emulated RAM in internal memory. Both cores were built at IDF's `-O2`; Fuse's runs from flash, and Z80_JLS's step loop and its block instructions keep ESPectrum's `IRAM_ATTR`.
+
+**Why:** Fuse's core is faster, by about 14% on the P4 and 15% on the host. It is also more accurate. The 11 `coretest` results where Z80_JLS differs:
+
+- 5 are not a fault. JR cc and DJNZ, when not taken, read their displacement in Z80_JLS and only contend for it in Fuse. The timing is the same. (The real Z80 does read it.)
+- 5 are the block-instruction findings published in 2018: when INIR, OTIR, INDR, OTDR or CPDR repeat, flags 3 and 5 come from PC, P and H change, and MEMPTR becomes PC+1. Fuse emulates this; Z80_JLS doesn't. Only an interrupted block instruction shows it.
+- 1 is a Z80_JLS bug: `OUT (n),A` with n = FFh sets MEMPTR to (A+1)×256 instead of A×256 (`REG_WZ |= (work8 + 1)` carries into the high byte).
+
+None of these changed a single register, T-state or screen in the TS2068 runs, so the machine matched Fuse on both cores. Fuse also keeps the project GPL-2.0-or-later, and it's the code base the machine was lifted from. Gate 2's tie rule would have chosen it anyway.
+
+**Gate 2 (met 2026-10-30):** Fuse's core holds a sustained frame of 2.5 ms against a 16.6 ms budget, which leaves about 85% for display and audio, and passes zexdoc, zexall and Fuse's `coretest`.
+
+**Ruled out:** Z80_JLS, for the reasons above. Making the project GPL-3 bought nothing.

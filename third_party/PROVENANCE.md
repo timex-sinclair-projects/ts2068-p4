@@ -17,7 +17,7 @@ These are pinned checkouts, used for reading and for lifting from. Nothing under
 
 ## Lifted files
 
-One row per file copied into `machine/`, `z80/` or `tspico/`. Note any local change in the last column.
+One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note any local change in the last column.
 
 | Our path | Source submodule | Source path | Source commit | Local changes |
 |---|---|---|---|---|
@@ -29,6 +29,8 @@ One row per file copied into `machine/`, `z80/` or `tspico/`. Note any local cha
 | `machine/ts2068.c` | `third_party/fuse-tspico` | `machines/ts2068.c`, `machines/tc2068.c`, `machines/machines_periph.c`, `peripherals/scld.c`, `peripherals/ula.c`, `peripherals/sound/ay.c`, `spectrum.c`, `machine.c`, `periph.c`, `memory_pages.c`, `display_render.c` | `a43958d` | Merged into one file and cut to the TS2068: 8K-chunk memory tables, a port switch, one contention table; DOCK and EXROM not contended. See `machine/README.md` |
 | `machine/z80_machine.h` | `third_party/fuse-tspico` | `z80/z80_macros.h` (the contention macros) | `a43958d` | Keyed on an 8K-chunk flag instead of `memory_map_read[].contended` |
 | `machine/event.c` | `third_party/fuse-tspico` | `event.c` (semantics only; rewritten) | `a43958d` | A fixed array, no glib |
+| `z80_jls/z80_jls.cpp`, `z80_jls/z80_jls.h` | `third_party/ZX-ESPectrum-IDF` | `src/Z80_JLS.cpp`, `include/Z80_JLS/z80.h` | `2a2c335` | GPL-3.0. ESPectrum's hooks removed (TR-DOS, tape traps, video, CPU loop); `step`, `takeINT` and the `z80_core.h` functions added. Not linked by default. See `z80_jls/README.md` |
+| `z80_jls/z80_jls_ops.h` | `third_party/ZX-ESPectrum-IDF` | `include/Z80_JLS/z80operations.h` (replaced) | `2a2c335` | Rewritten on `z80/z80_glue.h` |
 
 ## Not used
 

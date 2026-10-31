@@ -27,8 +27,7 @@
 #include <string.h>
 
 #include "z80_glue.h"
-#include "z80.h"
-#include "z80_macros.h"
+#include "z80_core.h"
 
 static const char *progname;		/* argv[0] */
 static const char *testsfile;		/* argv[1] */
@@ -224,7 +223,8 @@ static int
 read_test( FILE *f, libspectrum_dword *end_tstates )
 {
   unsigned af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc, memptr;
-  unsigned i, r, iff1, iff2, im;
+  unsigned i, r, iff1, iff2, im, halted;
+  z80_regs_t regs;
   unsigned end_tstates2;
   unsigned address;
   char test_name[ 80 ];
@@ -251,19 +251,21 @@ read_test( FILE *f, libspectrum_dword *end_tstates )
     return 1;
   }
 
-  AF  = af;  BC  = bc;  DE  = de;  HL  = hl;
-  AF_ = af_; BC_ = bc_; DE_ = de_; HL_ = hl_;
-  IX  = ix;  IY  = iy;  SP  = sp;  PC  = pc;
-  z80.memptr.w = memptr;
+  regs.af  = af;  regs.bc  = bc;  regs.de  = de;  regs.hl  = hl;
+  regs.af_ = af_; regs.bc_ = bc_; regs.de_ = de_; regs.hl_ = hl_;
+  regs.ix  = ix;  regs.iy  = iy;  regs.sp  = sp;  regs.pc  = pc;
+  regs.memptr = memptr;
 
-  if( fscanf( f, "%x %x %u %u %u %d %d", &i, &r, &iff1, &iff2, &im,
-	      &z80.halted, &end_tstates2 ) != 7 ) {
+  if( fscanf( f, "%x %x %u %u %u %u %u", &i, &r, &iff1, &iff2, &im,
+	      &halted, &end_tstates2 ) != 7 ) {
     fprintf( stderr, "%s: second registers line in `%s' corrupt\n", progname,
 	     testsfile );
     return 1;
   }
 
-  I = i; R = R7 = r; IFF1 = iff1; IFF2 = iff2; IM = im;
+  regs.i = i; regs.r = r; regs.iff1 = iff1; regs.iff2 = iff2; regs.im = im;
+  regs.halted = halted;
+  z80_set_regs( &regs );
   *end_tstates = end_tstates2;
 
   while( 1 ) {
@@ -300,10 +302,14 @@ read_test( FILE *f, libspectrum_dword *end_tstates )
 static void
 dump_z80_state( void )
 {
+  z80_regs_t r;
+
+  z80_get_regs( &r );
   printf( "%04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x %04x\n",
-	  AF, BC, DE, HL, AF_, BC_, DE_, HL_, IX, IY, SP, PC, z80.memptr.w );
-  printf( "%02x %02x %d %d %d %d %d\n", I, ( R7 & Z80_R7_MASK ) | ( R & Z80_R_LOWER_BITS ),
-	  IFF1, IFF2, IM, z80.halted, tstates );
+	  r.af, r.bc, r.de, r.hl, r.af_, r.bc_, r.de_, r.hl_, r.ix, r.iy, r.sp,
+	  r.pc, r.memptr );
+  printf( "%02x %02x %d %d %d %d %d\n", r.i, r.r,
+	  r.iff1, r.iff2, r.im, r.halted, tstates );
 }
 
 static void

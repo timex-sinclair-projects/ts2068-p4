@@ -18,8 +18,7 @@
 #include <string.h>
 
 #include "z80_glue.h"
-#include "z80.h"
-#include "z80_macros.h"
+#include "z80_core.h"
 
 libspectrum_dword tstates;
 libspectrum_dword event_next_event;
@@ -62,17 +61,20 @@ libspectrum_byte readport( libspectrum_word port ) { (void)port; tstates += 4; r
 void
 writeport( libspectrum_word port, libspectrum_byte b )
 {
+  z80_regs_t r;
+
   (void)b;
   tstates += 4;
+  z80_get_regs( &r );
   if( ( port & 0xff ) == 0xfe ) {
     finished = 1;
     event_next_event = 0;              /* leave z80_do_opcodes now */
   } else if( ( port & 0xff ) == 0xff ) {
-    if( C == 2 ) {
-      put( E );
-    } else if( C == 9 ) {
+    if( ( r.bc & 0xff ) == 2 ) {
+      put( r.de & 0xff );
+    } else if( ( r.bc & 0xff ) == 9 ) {
       libspectrum_word p;
-      for( p = DE; memory[ p ] != '$'; p++ ) put( memory[ p ] );
+      for( p = r.de; memory[ p ] != '$'; p++ ) put( memory[ p ] );
     }
   }
 }
@@ -83,6 +85,7 @@ main( int argc, char **argv )
   FILE *f;
   size_t n;
   unsigned long long total = 0;
+  z80_regs_t regs;
 
   if( argc != 2 ) { fprintf( stderr, "usage: %s program.com\n", argv[ 0 ] ); return 2; }
   f = fopen( argv[ 1 ], "rb" );
@@ -99,8 +102,10 @@ main( int argc, char **argv )
 
   z80_init( NULL );
   z80_reset( 1 );
-  PC = 0x0100;
-  SP = 0xc9ff;
+  z80_get_regs( &regs );
+  regs.pc = 0x0100;
+  regs.sp = 0xc9ff;
+  z80_set_regs( &regs );
 
   while( !finished ) {
     tstates = 0;

@@ -34,7 +34,7 @@ import tempfile
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-RUN = os.path.join(ROOT, "test", "machine", "run_ts2068")
+RUN = os.path.join(ROOT, "test", "machine", "run_ts2068")   # + "-jls" for --core jls
 FUSE_ROMS = os.path.join(ROOT, "third_party", "fuse-tspico", "roms")
 CPU_KEYS = ("af", "bc", "de", "hl", "af_alt", "bc_alt", "de_alt", "hl_alt",
             "ix", "iy", "sp", "pc", "i", "r", "iff1", "iff2",
@@ -107,10 +107,10 @@ def run_fuse(fuse, home, ex, frames, outdir):
     return r["state"]["cpu"], Image.open(os.path.join(outdir, "screen.png")).convert("RGB")
 
 
-def run_ours(home, ex, frames, outdir, ts2068):
+def run_ours(run, home, ex, frames, outdir, ts2068):
     os.makedirs(outdir, exist_ok=True)
     state, screen = os.path.join(outdir, "state.json"), os.path.join(outdir, "screen.ppm")
-    cmd = [RUN, "--rom0", home, "--rom1", ex, "--frames", str(frames),
+    cmd = [run, "--rom0", home, "--rom1", ex, "--frames", str(frames),
            "--state", state, "--screen", screen]
     if not ts2068:
         cmd.append("--fuse-contention")
@@ -138,13 +138,16 @@ def main():
     ap.add_argument("--fuse", default=os.path.expanduser("~/esp/ref/fuse-tspico/fuse"))
     ap.add_argument("--frames", default="1,2,10,50,100,300,1000,3000")
     ap.add_argument("--rom", default="all", choices=("stock", "tspico", "timing", "all"))
+    ap.add_argument("--core", default="fuse", choices=("fuse", "jls"),
+                    help="which Z80 core our run_ts2068 was built with")
     ap.add_argument("--ts2068", action="store_true",
                     help="our TS2068 contention (DOCK/EXROM never contended); "
                          "the timing ROM must then differ from Fuse as expected")
     a = ap.parse_args()
 
-    if not os.path.exists(RUN):
-        sys.exit("build it first: make -C test/machine")
+    run = RUN + ("-jls" if a.core == "jls" else "")
+    if not os.path.exists(run):
+        sys.exit("build it first: make -C test/machine CORE=%s" % a.core)
     frames = [int(n) for n in a.frames.split(",")]
     failed = 0
     with tempfile.TemporaryDirectory() as tmp:
@@ -152,7 +155,7 @@ def main():
             for n in frames:
                 d = os.path.join(tmp, "%s-%d" % (name, n))
                 fc, fs = run_fuse(a.fuse, home, ex, n, os.path.join(d, "fuse"))
-                oc, os_ = run_ours(home, ex, n, os.path.join(d, "ours"), a.ts2068)
+                oc, os_ = run_ours(run, home, ex, n, os.path.join(d, "ours"), a.ts2068)
                 regs = [k for k in CPU_KEYS if fc[k] != oc[k]]
                 bad, first = screen_diff(os_, fs)
                 ok = not regs and not bad

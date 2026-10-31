@@ -240,9 +240,9 @@ With `fuse_dock_contention` set, ours matches Fuse's column exactly. On a real T
 - **Correctness:** the RAM after 2,800 frames is the same on the P4 and the host (FNV-1a `22bb9d65`).
 - **Where things live:** the emulated RAM, the ROM copies and the contention table landed in internal L2MEM (`0x4FF4xxxx`) as plain `.bss`, with no attributes needed. The Z80 core runs from flash through the cache: `z80_do_opcodes` is 106 KB, with the prefixed opcodes inlined (`HAVE_ENOUGH_MEMORY`). Moving it to internal RAM, or building without `HAVE_ENOUGH_MEMORY`, could be tried if the platform layer needs the time, but there's no need yet.
 - **Gotcha:** MicroPython's esp32 port exports `machine_init`, which collided at link time. The machine API is now prefixed `ts2068_`.
-- **Space:** the app partition is now 93% full: `micropython.bin` is 0x1ccf40 of 0x1f0000, leaving 140 KB. Phase 3's platform layer will need a bigger partition table or a smaller image.
+- **Space:** the app partition is now 93% full: `micropython.bin` is 0x1ccf40 of 0x1f0000, leaving 140 KB (0x1ccfe0 after the core interface was added). Phase 3's platform layer will need a bigger partition table or a smaller image.
 
-Gate 2 isn't met yet: zexdoc/zexall and the Z80_JLS comparison are still to do. On these numbers Fuse's core has ample headroom, and a tie goes to it.
+Gate 2 wasn't met yet at this point: zexdoc/zexall and the Z80_JLS comparison were still to do. (Both done below.)
 
 **zexdoc and zexall pass on Fuse's core (2026-10-30).**
 
@@ -251,5 +251,31 @@ Gate 2 isn't met yet: zexdoc/zexall and the Z80_JLS comparison are still to do. 
 - **Result:** both pass 67 of 67, so zexall's undocumented flags are right too. Each runs 46.7 billion T-states, about 32 s on the Mac.
 - **Check on the runner:** with one bit of the first expected CRC flipped in a scratch copy, it reports `ERROR` for that test.
 
-With coretest, the 2.5 ms P4 frame and the Fuse comparisons, Fuse's core now meets every Gate 2 condition. What's left in Phase 2 is the comparison the plan asks for: Z80_JLS behind the same interface, then the decision in `docs/DECISIONS.md`.
+With coretest, the 2.5 ms P4 frame and the Fuse comparisons, Fuse's core now meets every Gate 2 condition. What was left in Phase 2 was the comparison the plan asks for: Z80_JLS behind the same interface, then the decision in `docs/DECISIONS.md`.
 
+**Z80_JLS behind the same interface (2026-10-30).**
+
+- **The interface:** `z80/z80_core.h` declares `z80_init`, `z80_reset`, `z80_do_opcodes`, `z80_interrupt`, `z80_frame`, `z80_get_regs`/`z80_set_regs` and `z80_core_name`. Its conventions are Fuse's. `z80/z80_core_fuse.c` adds the last four for Fuse's core. `machine/ts2068.c`, `test/z80/coretest.c` and `test/z80/zexrun.c` now use only this, and no Fuse register macros.
+- **Choosing a core:** `z80/core.mk` takes `CORE=fuse` (the default) or `CORE=jls` in both host test Makefiles. Z80_JLS is compiled as C++17 without exceptions or RTTI and linked with `cc`, so it needs no C++ runtime. Its binaries get a `-jls` suffix. `compare_fuse.py --core jls` runs those. On the P4, `TS2068_CORE=jls` in the environment picks it when cmake configures. The choice is fixed at configure time, so give each core its own build directory:
+
+  ```
+  TS2068_CORE=jls make BOARD=ESP32_GENERIC_P4 BOARD_VARIANT=PRE_REV3_C6_WIFI \
+    BUILD=build-ESP32_GENERIC_P4-PRE_REV3_C6_WIFI-jls USER_C_MODULES=... -j8
+  ```
+
+- **The lift:** `z80_jls/README.md`. A script removed ESPectrum's hooks: TR-DOS paging, the tape traps, the video and CPU loop. The instructions are unchanged.
+- **Gotcha:** a `status()` key named `core` failed the build with `redeclaration of enumerator 'MP_QSTR_core'` in `frozen_content.c`. The key is `z80`.
+
+| | Fuse | Z80_JLS |
+|---|---|---|
+| P4 frame, BASIC loop | 2,511 µs (min 2,494, max 2,560) | 2,928 µs (min 2,912, max 2,986) |
+| P4 boot frames | 2,334 µs | 2,865 µs |
+| Host frame, BASIC loop | 42 µs | 49 µs |
+| zexdoc, host | 32 s | 40 s |
+| zexdoc, zexall | 67/67 each | 67/67 each |
+| coretest | 1,356/1,356 | 1,345/1,356 |
+| Machine against fuse-tspico | match | match |
+| P4 RAM hash after 2,800 frames | `22bb9d65` (same as host) | `22bb9d65` (same as host) |
+| `micropython.bin` | 0x1ccfe0 | 0x1bff70 |
+
+DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS2068 run. **Decided: Fuse's core (D5), and Gate 2 is met.** The board was left with the Fuse image.

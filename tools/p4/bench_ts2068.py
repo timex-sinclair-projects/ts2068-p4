@@ -57,8 +57,8 @@ def main():
 
     n = s["frames"] - s["start"]
     mean = s["window_us"] / n
-    print("P4, core 0: %d frames timed (%d to %d), BASIC loop running"
-          % (n, s["start"], s["frames"]))
+    print("P4, core 0, %s Z80 core: %d frames timed (%d to %d), BASIC loop running"
+          % (s.get("z80", "fuse"), n, s["start"], s["frames"]))
     print("  per frame: mean %.0f us, min %d, max %d; budget %d us (%.0f%% used)"
           % (mean, s["min_us"], s["max_us"], BUDGET_US, 100 * mean / BUDGET_US))
     print("  frames over budget: %d; boot frames (0 to %d): mean %.0f us"
