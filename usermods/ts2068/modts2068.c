@@ -6,7 +6,7 @@
 //   ts2068.status()                  # -> dict; state "done" when finished
 //
 //   ts2068.run(home_rom, exrom)      # real time on core 0, drawn on the panel,
-//                                    # with sound
+//                                    # with sound and the on-screen keyboard
 //   ts2068.run_status()              # -> dict of frame timings
 //   ts2068.volume(10)                # 0-100
 //   ts2068.stop()
@@ -35,6 +35,8 @@
 #include "machine.h"
 #include "p4_audio.h"
 #include "p4_display.h"
+#include "p4_keyboard.h"
+#include "p4_touch.h"
 #include "z80_core.h"
 
 #define BENCH_CORE 0
@@ -42,6 +44,7 @@
 #define BENCH_STACK 4096
 #define FRAME_BUDGET_US 16635           // one 60.1145 Hz frame
 #define SAMPLE_RATE 44100
+#define ROM_FONT 0x3d00                 // the HOME ROM's character set
 #define HIST_BUCKETS 20                 // 1 ms each; the last takes the rest
 
 static struct {
@@ -64,7 +67,7 @@ static struct {
     uint64_t emu_us, display_us;
     uint32_t emu_max, display_max, work_max;
     int64_t started;
-    uint64_t audio_wait_us;
+    uint64_t audio_wait_us, touch_us;
 } r;
 static esp_timer_handle_t tick;
 static TaskHandle_t run_handle;
@@ -149,7 +152,9 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bench_obj, 2, 4, bench);
 // loop once the ROM has booted. redraw_all=True converts every line of
 // every frame, for measuring the display's worst case. The sound can't be
 // turned off once a run has had it (ts2068_sound_init is once only), so
-// compare sound=False on a fresh boot. No keyboard yet.
+// compare sound=False on a fresh boot. The keyboard is on the screen
+// (platform/p4_keyboard.c): the touches are read at the start of each
+// frame, unless demo=True, which does its own typing.
 
 
 static void tick_cb(void *arg) {
@@ -169,6 +174,14 @@ static void run_task(void *arg) {
         }
         if (r.demo) {
             basic_loop_frame(r.frame);
+        } else {
+            int64_t t = esp_timer_get_time();
+            p4_touch_point_t points[P4_TOUCH_MAX];
+            uint8_t rows[8];
+            int n = p4_touch_read(points, P4_TOUCH_MAX);
+            p4_keyboard_touch(points, n, rows);
+            ts2068_set_keyboard(rows);
+            r.touch_us += esp_timer_get_time() - t;
         }
         int64_t t0 = esp_timer_get_time();
         ts2068_run_frame();
@@ -232,9 +245,15 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("audio: %s"),
             esp_err_to_name(err));
     }
+    if ((err = p4_touch_init()) != ESP_OK) {
+        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("touch: %s"),
+            esp_err_to_name(err));
+    }
     if (ts2068_init(&cfg)) {
         mp_raise_ValueError(MP_ERROR_TEXT("EXROM: not 8K or 16K"));
     }
+    p4_keyboard_init((const uint8_t *)home.buf + ROM_FONT);
+    p4_display_set_side(p4_keyboard_draw);
     if (sound && ts2068_sound_init(SAMPLE_RATE)) {
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("sound"));
     }
@@ -332,6 +351,9 @@ static MP_DEFINE_CONST_FUN_OBJ_0(status_obj, status);
 // converted in all, and the mean and max time of a frame that was drawn.
 // With sound: samples written, underruns (the I2S ran dry), and the mean
 // and max wait for room in its buffers (audio_wait_us, audio_wait_max).
+// The keyboard: keys (the keys down now, bit row * 10 + column from the
+// top left), the mean and max time to read the touches (touch_us,
+// touch_max), the GT911's reports and I2C errors.
 static mp_obj_t run_status(void) {
     mp_obj_t d = mp_obj_new_dict(0);
     uint32_t n = r.frame ? r.frame : 1;
@@ -356,6 +378,13 @@ static mp_obj_t run_status(void) {
     store(d, MP_QSTR_draw_us, mp_obj_new_int_from_uint(s.drawn ? s.draw_us_total / s.drawn : 0));
     store(d, MP_QSTR_draw_max, mp_obj_new_int_from_uint(s.draw_us_max));
     store(d, MP_QSTR_flip_max, mp_obj_new_int_from_uint(s.flip_us_max));
+    p4_touch_stats_t t;
+    p4_touch_get_stats(&t);
+    store(d, MP_QSTR_keys, mp_obj_new_int_from_ull(p4_keyboard_down()));
+    store(d, MP_QSTR_touch_us, mp_obj_new_int_from_uint(r.touch_us / n));
+    store(d, MP_QSTR_touch_max, mp_obj_new_int_from_uint(t.read_us_max));
+    store(d, MP_QSTR_touch_reports, mp_obj_new_int_from_uint(t.reports));
+    store(d, MP_QSTR_touch_errors, mp_obj_new_int_from_uint(t.errors));
     if (r.sound) {
         p4_audio_stats_t a;
         p4_audio_get_stats(&a);

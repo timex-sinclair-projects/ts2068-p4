@@ -21,11 +21,11 @@
 #define P4_DISPLAY_TV_X 0
 #define P4_DISPLAY_TV_Y 60
 
-/* Power the DSI PHY, start the panel, clear both frame buffers and turn
-   the backlight on. The side panel shows the 16 TS2068 colours as bars,
-   top to bottom 0-7 then 8-15 (black, blue, red, magenta, green, cyan,
-   yellow, white), until something else draws there: a check that the
-   colours and byte order are right. Call once; later calls do nothing. */
+/* Frame buffers, flipped in turn */
+#define P4_DISPLAY_BUFFERS 3
+
+/* Power the DSI PHY, start the panel, clear the frame buffers and turn
+   the backlight on. Call once; later calls do nothing. */
 esp_err_t p4_display_init( void );
 
 /* Backlight, 0 (off) to 100 */
@@ -42,6 +42,16 @@ typedef void (*p4_display_line_fn)( int line, uint8_t *pixels );
    if the frame is the same as the last one shown. Waits only for the PPA
    to finish its copies, never for the panel. */
 int p4_display_ts2068( p4_display_line_fn render_line );
+
+/* Brings the side panel in frame buffer fb (number buffer) up to date,
+   writing back from the cache what it draws; returns nonzero if what it
+   now shows differs from buffer shown, the one on screen or waiting.
+   p4_display_ts2068 calls it for the buffer it draws into, and flips when
+   it returns nonzero even if the TS2068's picture hasn't changed. */
+typedef int (*p4_display_side_fn)( uint16_t *fb, int buffer, int shown );
+
+/* The side panel's hook, or NULL for none */
+void p4_display_set_side( p4_display_side_fn side );
 
 typedef struct {
   uint32_t refreshes;           /* panel refreshes since init */

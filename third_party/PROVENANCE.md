@@ -38,13 +38,14 @@ One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note a
 
 ## Facts taken from other sources
 
-No code is copied from these. `platform/p4_display.c` and `platform/p4_audio.c` use their values (register writes, timings, pins), as noted at the top of the file.
+No code is copied from these. `platform/p4_display.c`, `p4_audio.c` and `p4_touch.c` use their values (register writes, timings, pins), as noted at the top of the file.
 
 | Source | Version | License | What |
 |---|---|---|---|
 | Elecrow `CrowPanel-Advanced-7inch-ESP32-P4-HMI-AI-Display-1024x600-IPS-Touch-Screen`, `example/V1.2/idf-code/Lesson07-Turn_on_the_screen` (not a submodule; cloned to `~/esp/ref/crowpanel-p4`) | `f0ebc0c` | none stated | DSI lanes and rate, DPI timing, LDO3 at 2.5 V, backlight on GPIO31 |
 | Espressif `esp_lcd_ek79007` (component registry, as vendored in that example) | 1.0.2 | Apache-2.0 | The EK79007's start-up register writes |
 | Elecrow, same repo, `example/V1.2/idf-code/Lesson12-Playing_Loca_Music_from_SD_Card` | `f0ebc0c` | none stated | I2S pins (LRCLK 21, BCLK 22, DATA 23), the Philips 16-bit stereo format, the amplifier enable on GPIO30, active low (`platform/p4_audio.c`) |
+| Elecrow, same repo, `example/V1.2/idf-code/Lesson05-Touchscreen` | `f0ebc0c` | none stated | The GT911's I2C pins (SDA 45, SCL 46), its address and reset/interrupt pins (GPIO40, GPIO42), and its orientation (`platform/p4_touch.c`) |
 
 ## Not used
 

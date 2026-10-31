@@ -85,7 +85,7 @@ static esp_lcd_panel_io_handle_t dbi_io;
 static esp_lcd_panel_handle_t panel;
 /* Three frame buffers: one being scanned, one flipped and waiting for
    the next refresh, and one to draw into, so drawing never waits */
-#define NUM_FBS 3
+#define NUM_FBS P4_DISPLAY_BUFFERS
 static uint16_t *fb[ NUM_FBS ];
 static volatile int flipped;            /* scanned from the next refresh */
 static volatile int scanning;           /* being scanned now */
@@ -107,6 +107,7 @@ static ppa_client_handle_t ppa;
 static uint8_t line_buf[ TV_WIDTH ] __attribute__(( aligned( 4 ) ));
 static p4_display_stats_t stats;
 static bool redraw_all;
+static p4_display_side_fn side;
 
 /* A refresh finished. On this chip (before revision 3) that's the DMA's
    end of transfer, at which it restarts on the frame buffer the last flip
@@ -235,18 +236,6 @@ panel_init( void )
                                              (void **)&fb[1], (void **)&fb[2] );
 }
 
-/* The side panel's colour check: 16 bars, colours 0-15 top to bottom */
-static void
-draw_colour_bars( uint16_t *f )
-{
-  int bar = P4_DISPLAY_HEIGHT / 16;
-  for( int y = 0; y < 16 * bar; y++ ) {
-    uint16_t c = palette[ y / bar ];
-    uint16_t *p = f + y * P4_DISPLAY_WIDTH + TV_WIDTH + 32;
-    for( int x = 0; x < P4_DISPLAY_WIDTH - TV_WIDTH - 64; x++ ) p[x] = c;
-  }
-}
-
 esp_err_t
 p4_display_init( void )
 {
@@ -285,7 +274,6 @@ p4_display_init( void )
   size_t fb_bytes = P4_DISPLAY_WIDTH * P4_DISPLAY_HEIGHT * 2;
   for( int i = 0; i < NUM_FBS; i++ ) {
     memset( fb[i], 0, fb_bytes );
-    draw_colour_bars( fb[i] );
     esp_cache_msync( fb[i], fb_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M );
     /* No line hashes to 0 (the hash is never 0), so the first frame
        draws every line */
@@ -393,6 +381,7 @@ p4_display_ts2068( p4_display_line_fn render_line )
     xSemaphoreTake( strip_free[i], portMAX_DELAY );
     xSemaphoreGive( strip_free[i] );
   }
+  if( side && side( fb[t], t, f ) ) changed = true;
   if( !changed ) {
     stats.unchanged++;
     return 1;
@@ -426,6 +415,12 @@ p4_display_get_stats( p4_display_stats_t *s )
 {
   *s = stats;
   s->refreshes = refreshes;
+}
+
+void
+p4_display_set_side( p4_display_side_fn fn )
+{
+  side = fn;
 }
 
 void

@@ -1,6 +1,7 @@
 # ts2068: the emulated TS2068 (machine/ on a Z80 core) as a MicroPython
 # user C module: the Phase 2 benchmark, and the machine in real time on the
-# panel (platform/p4_display.c) with sound (machine/sound/, platform/p4_audio.c).
+# panel (platform/p4_display.c) with sound (machine/sound/, platform/p4_audio.c)
+# and the on-screen keyboard (platform/p4_touch.c, p4_keyboard.c).
 #
 # The Z80 core is Fuse's (z80/) unless the environment says
 # TS2068_CORE=jls at configure time, which builds Z80_JLS (z80_jls/)
@@ -42,6 +43,8 @@ target_sources(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}/test/machine/basic_loop.c
     ${TS2068_ROOT}/platform/p4_display.c
     ${TS2068_ROOT}/platform/p4_audio.c
+    ${TS2068_ROOT}/platform/p4_touch.c
+    ${TS2068_ROOT}/platform/p4_keyboard.c
 )
 
 target_include_directories(usermod_ts2068 INTERFACE
@@ -61,6 +64,6 @@ target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY SOUND_REA
 # MicroPython's main component doesn't ask for these IDF components, but
 # they're in the build
 target_link_libraries(usermod_ts2068 INTERFACE idf::esp_lcd idf::esp_driver_ledc idf::esp_driver_ppa
-    idf::esp_driver_i2s idf::esp_driver_gpio)
+    idf::esp_driver_i2s idf::esp_driver_gpio idf::esp_driver_i2c)
 
 target_link_libraries(usermod INTERFACE usermod_ts2068)
