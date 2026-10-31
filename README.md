@@ -44,7 +44,7 @@ You need [esptool](https://docs.espressif.com/projects/esptool/) (`pip install e
    ```
 3. Unzip the card zip onto a FAT32 microSD card, put it in the panel, and reset it. The TS2068 starts with the TS-Pico ROM.
 
-To pick another ROM, use **Load ROM** in the menu; ROM files go in `/TS2068/ROMS` on the card.
+To pick another ROM, use **Load ROM** in the menu; ROM files go in `/TS2068/ROMS` on the card. DOCK cartridges go in `/TS2068/DOCK`, as `.dck` files or the cartridge's ROM as it is (8K to 64K); **Cartridge** in the menu puts one in, or takes it out, and resets the machine.
 
 Writing the whole image also clears a paired Bluetooth keyboard: pair it again from the menu.
 

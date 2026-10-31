@@ -7,6 +7,7 @@
 #   emu.save(volume=20)              # change settings.json
 #   emu.settings()                   # -> dict
 #   emu.roms()                       # -> the files in ROMS/
+#   emu.docks()                      # -> the files in DOCK/
 #   emu.save_snapshot("game")        # the running machine -> SNAPS/game.szx
 #   emu.load_snapshot("game")        # starts the machine first if need be
 #   emu.snapshots()                  # -> the files in SNAPS/
@@ -14,8 +15,10 @@
 #
 # On the card:
 #
-#   /TS2068/settings.json   rom, exrom, volume, sound, tspico
+#   /TS2068/settings.json   rom, exrom, volume, sound, tspico, dock
 #   /TS2068/ROMS/           ROM files
+#   /TS2068/DOCK/           DOCK cartridges: .dck files, or a cartridge's
+#                           ROM as it is (8K to 64K, from chunk 0)
 #   /TS2068/SNAPS/          SZX snapshots (ts2068.snapshot); Fuse's load
 #                           too, if they need no DOCK cartridge
 #   /TS2068/TS/             a TS-Pico firmware update: a copy of src/TS
@@ -28,8 +31,9 @@
 # tspico is false: the firmware (p4host.py, /TS) starts the first time,
 # and ports 0Eh/0Fh go to it. The card is the TS-Pico's too: it's
 # mounted only while the files are read, so the TS-Pico firmware can mount
-# it itself. tools/p4/install.py puts this file on the flash, and
-# tools/p4/sd_roms.py puts ROMs on the card.
+# it itself. dock names a file in DOCK/, or "" for none: the machine
+# boots with that cartridge in. tools/p4/install.py puts this file on the
+# flash, and tools/p4/sd_roms.py puts ROMs on the card.
 
 import json
 import machine
@@ -42,8 +46,9 @@ import ts2068
 SD = "/sd"
 DIR = SD + "/TS2068"
 SNAPS = DIR + "/SNAPS"
+DOCK = DIR + "/DOCK"
 DEFAULTS = {"rom": "tc2068-0.rom", "exrom": "tc2068-1.rom", "volume": 10, "sound": True,
-            "tspico": True}
+            "tspico": True, "dock": ""}
 READY_MS = 15000                        # the firmware's boot, to READY
 
 
@@ -118,6 +123,28 @@ def roms():
             return []
 
 
+def docks():
+    with _Card():
+        try:
+            return sorted(os.listdir(DOCK))
+        except OSError:
+            return []
+
+
+def _cartridge(name):
+    """DOCK/name as .dck bytes: a .dck as it is, anything else a ROM for
+    the DOCK bank's chunks from 0 (Fuse's format, machine/machine.h)"""
+    with open(DOCK + "/" + name, "rb") as f:
+        data = f.read()
+    if name.lower().endswith(".dck"):
+        return data
+    n = (len(data) + 0x1fff) // 0x2000
+    if not 0 < n <= 8:
+        raise ValueError("%s: not 8K to 64K" % name)
+    data += b"\xff" * (n * 0x2000 - len(data))
+    return bytes([0] + [2] * n + [0] * (8 - n)) + data
+
+
 def _szx(name):
     return name if name.lower().endswith(".szx") else name + ".szx"
 
@@ -171,11 +198,18 @@ def start(**overrides):
             home, ex = home[:0x4000], home[0x4000:]
         else:
             ex = _load(s["exrom"])
+        cart = None
+        if s["dock"]:
+            try:
+                cart = _cartridge(s["dock"])
+            except OSError:             # gone from the card: boot without it
+                print("emu: no %s/%s" % (DOCK, s["dock"]))
     if len(home) != 0x4000:
         raise ValueError("%s: not 16K or 32K" % s["rom"])
     # A 32K ROM is the TS-Pico's: plug the TS-Pico in, the firmware first
     pico = s["tspico"] and len(ex) == 0x4000 and _tspico()
     ts2068.stop()
+    ts2068.dock(cart)
     ts2068.volume(s["volume"])
     ts2068.run(home, ex, False, False, s["sound"], pico)
     return s

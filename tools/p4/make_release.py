@@ -61,6 +61,8 @@ are the TS-Pico's own card files. TS2068/ is the emulator's:
                          these copies come with Fuse); TSPICO-23.ROM, the
                          TS-Pico ROM (MIT, from tspico-firmware-build)
   TS2068/SNAPS/          snapshots saved from the menu
+  TS2068/DOCK/           DOCK cartridges for the menu's Cartridge: .dck files,
+                         or a cartridge's ROM as it is (8K to 64K)
 """
 
 
@@ -90,6 +92,7 @@ def card(path, version):
             z.write(rom, "TS2068/ROMS/" + os.path.basename(rom))
         z.writestr("TS2068/settings.json", json.dumps(SETTINGS) + "\n")
         z.writestr("TS2068/SNAPS/", "")
+        z.writestr("TS2068/DOCK/", "")
         z.writestr("README.txt", CARD_README % version)
 
 

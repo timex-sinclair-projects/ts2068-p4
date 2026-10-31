@@ -31,6 +31,7 @@
    and the TS-Pico on 0E/0F. Behaviour is Fuse's except where marked
    "Not Fuse". machine/README.md lists what is left out. */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "machine.h"
@@ -72,12 +73,30 @@ libspectrum_byte ts2068_contention[ TS2068_TSTATES_PER_FRAME + CONTENTION_SLACK 
 /* Memory. HOME: the 16K ROM, then RAM at 0x4000-0xFFFF (Fuse's RAM pages
    5, 2 and 0); RAM5, the screen, is contended. EXROM: 8K, or 16K with
    the even chunks seeing its first half and the odd ones its second.
-   DOCK: no cartridge, so it reads FFh. */
+   DOCK: FFh without a cartridge. */
 static libspectrum_byte home_rom[ 0x4000 ];
 static libspectrum_byte ram[ 0xc000 ];
 static libspectrum_byte exrom[ 0x4000 ];
 static size_t exrom_size;
 static libspectrum_byte empty_chunk[ 0x2000 ];
+
+/* A DOCK cartridge (Fuse's dck.c): the 8K chunks a .dck file gives the
+   DOCK, EXROM and HOME banks. ROM chunks are read-only. RAM chunks start
+   from the file's contents (or zeros) at each insert and hard reset;
+   HOME RAM chunks are copied into RAM then, as Fuse does. Everything
+   lives in one allocation, so on the P4 it lands in PSRAM. */
+enum { DCK_DOCK, DCK_EXROM, DCK_HOME, DCK_BANKS };
+#define DCK_NULL      0         /* the file's chunk types */
+#define DCK_RAM_EMPTY 1
+#define DCK_ROM       2
+#define DCK_RAM       3
+
+static struct {
+  libspectrum_byte type;        /* DCK_NULL: the bank's own chunk */
+  const libspectrum_byte *file; /* its contents, or NULL: zeros */
+  libspectrum_byte *page;       /* what's mapped; NULL for HOME RAM */
+} dck[ DCK_BANKS ][ 8 ];
+static libspectrum_byte *dck_memory;
 
 static const libspectrum_byte *read_map[ 8 ];
 static libspectrum_byte *write_map[ 8 ];   /* NULL: read-only */
@@ -149,13 +168,27 @@ memory_map( void )
     int screen_chunk = ( c == 2 || c == 3 );
 
     if( scld_hsr & ( 1 << c ) ) {
-      if( scld_dec & SCLD_ALTMEMBANK )
-        read_map[ c ] = exrom +
-          ( exrom_size == 0x4000 && ( c & 1 ) ? 0x2000 : 0 );
-      else
-        read_map[ c ] = empty_chunk;
-      write_map[ c ] = NULL;
+      int bank = scld_dec & SCLD_ALTMEMBANK ? DCK_EXROM : DCK_DOCK;
+
+      if( dck[ bank ][ c ].page ) {
+        read_map[ c ] = dck[ bank ][ c ].page;
+        write_map[ c ] = dck[ bank ][ c ].type == DCK_ROM ?
+                         NULL : dck[ bank ][ c ].page;
+      } else {
+        if( bank == DCK_EXROM )
+          read_map[ c ] = exrom +
+            ( exrom_size == 0x4000 && ( c & 1 ) ? 0x2000 : 0 );
+        else
+          read_map[ c ] = empty_chunk;
+        write_map[ c ] = NULL;
+      }
       ts2068_contended[ c ] = fuse_dock_contention && screen_chunk;
+    } else if( dck[ DCK_HOME ][ c ].page ) {
+      /* A cartridge's ROM over HOME; its RAM over the ROM chunks */
+      read_map[ c ] = dck[ DCK_HOME ][ c ].page;
+      write_map[ c ] = dck[ DCK_HOME ][ c ].type == DCK_ROM ?
+                       NULL : dck[ DCK_HOME ][ c ].page;
+      ts2068_contended[ c ] = screen_chunk;
     } else if( c < 2 ) {
       read_map[ c ] = home_rom + c * 0x2000;
       write_map[ c ] = NULL;
@@ -460,6 +493,113 @@ ts2068_frame_count( void )
 
 /* ---- setup ------------------------------------------------------------- */
 
+/* ---- DOCK cartridges -------------------------------------------------- */
+
+/* The cartridge's RAM chunks from the file (or zeros), and its HOME RAM
+   chunks into RAM */
+static void
+dck_load_ram( void )
+{
+  int b, c;
+
+  for( b = 0; b < DCK_BANKS; b++ )
+    for( c = 0; c < 8; c++ ) {
+      libspectrum_byte type = dck[ b ][ c ].type;
+      libspectrum_byte *to;
+
+      if( type != DCK_RAM && type != DCK_RAM_EMPTY ) continue;
+      to = dck[ b ][ c ].page ? dck[ b ][ c ].page : ram + ( c - 2 ) * 0x2000;
+      if( dck[ b ][ c ].file ) memcpy( to, dck[ b ][ c ].file, 0x2000 );
+      else memset( to, 0, 0x2000 );
+    }
+}
+
+static int
+dck_bank( libspectrum_byte id )
+{
+  return id == 0 ? DCK_DOCK : id == 254 ? DCK_EXROM : id == 255 ? DCK_HOME : -1;
+}
+
+int
+ts2068_dock_insert( const uint8_t *file, size_t size )
+{
+  size_t at, need = 0;
+  libspectrum_byte *mem;
+  int c;
+
+  /* Check it all, and count the memory: a copy of each chunk the file
+     holds, and a live copy of each RAM chunk outside HOME RAM */
+  for( at = 0; at < size; ) {
+    int b, chunks = 0;
+
+    if( size - at < 9 || ( b = dck_bank( file[ at ] ) ) < 0 )
+      return TS2068_DCK_CORRUPT;
+    for( c = 0; c < 8; c++ ) {
+      libspectrum_byte type = file[ at + 1 + c ];
+
+      if( type > DCK_RAM ) return TS2068_DCK_CORRUPT;
+      if( type == DCK_ROM || type == DCK_RAM ) chunks++;
+      if( ( type == DCK_RAM || type == DCK_RAM_EMPTY ) &&
+          !( b == DCK_HOME && c >= 2 ) ) need += 0x2000;
+    }
+    if( size - at - 9 < (size_t)chunks * 0x2000 ) return TS2068_DCK_CORRUPT;
+    need += chunks * 0x2000;
+    at += 9 + chunks * 0x2000;
+  }
+  if( !need ) return TS2068_DCK_CORRUPT;
+  mem = malloc( need );
+  if( !mem ) return TS2068_DCK_MEMORY;
+
+  ts2068_dock_eject();
+  dck_memory = mem;
+  for( at = 0; at < size; ) {
+    int b = dck_bank( file[ at ] );
+    const libspectrum_byte *types = file + at + 1;
+
+    at += 9;
+    for( c = 0; c < 8; c++ ) {
+      libspectrum_byte type = types[ c ];
+      const libspectrum_byte *data = NULL;
+
+      if( type == DCK_NULL ) continue;
+      if( type == DCK_ROM || type == DCK_RAM ) {
+        memcpy( mem, file + at, 0x2000 );
+        data = mem;
+        mem += 0x2000;
+        at += 0x2000;
+      }
+      dck[ b ][ c ].type = type;
+      dck[ b ][ c ].file = data;
+      if( type == DCK_ROM )
+        dck[ b ][ c ].page = (libspectrum_byte *)data;
+      else if( b == DCK_HOME && c >= 2 )
+        dck[ b ][ c ].page = NULL;
+      else {
+        dck[ b ][ c ].page = mem;
+        mem += 0x2000;
+      }
+    }
+  }
+  dck_load_ram();
+  memory_map();
+  return 0;
+}
+
+void
+ts2068_dock_eject( void )
+{
+  free( dck_memory );
+  dck_memory = NULL;
+  memset( dck, 0, sizeof( dck ) );
+  memory_map();
+}
+
+int
+ts2068_dock_present( void )
+{
+  return dck_memory != NULL;
+}
+
 int
 ts2068_init( const ts2068_config_t *config )
 {
@@ -500,7 +640,10 @@ ts2068_init( const ts2068_config_t *config )
 void
 ts2068_reset( int hard_reset )
 {
-  if( hard_reset ) memset( ram, 0, sizeof( ram ) );
+  if( hard_reset ) {
+    memset( ram, 0, sizeof( ram ) );
+    dck_load_ram();             /* Fuse's dck_reset reloads the file */
+  }
 
   sound_ay_reset();             /* Fuse's machine_reset */
   event_reset();

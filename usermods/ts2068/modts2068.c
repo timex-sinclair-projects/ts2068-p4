@@ -11,6 +11,8 @@
 //                                    # 0Eh/0Fh to the firmware via p4bridge
 //   ts2068.run_status()              # -> dict of frame timings
 //   ts2068.volume(10)                # 0-100
+//   ts2068.dock(dck)                 # a DOCK cartridge (.dck bytes), or None:
+//                                    # while stopped; run() boots with it
 //   ts2068.stop()
 //   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
 //   ts2068.load_snapshot(data)       # after run(), running or stopped
@@ -398,6 +400,29 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(run_obj, 2, 6, run);
 
+// dock(data): insert a .dck cartridge, or eject with None. Only while
+// stopped: run() then boots with it, as a TS2068 powered on with a
+// cartridge in. machine/ copies it into one allocation (PSRAM).
+static mp_obj_t dock(mp_obj_t data) {
+    if (r.running || b.state == RUNNING) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("stop() first"));
+    }
+    if (data == mp_const_none) {
+        ts2068_dock_eject();
+        return mp_const_none;
+    }
+    mp_buffer_info_t d;
+    mp_get_buffer_raise(data, &d, MP_BUFFER_READ);
+    int err = ts2068_dock_insert(d.buf, d.len);
+    if (err == TS2068_DCK_MEMORY) {
+        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("cartridge"));
+    } else if (err) {
+        mp_raise_ValueError(MP_ERROR_TEXT("cartridge: not a .dck file"));
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(dock_obj, dock);
+
 static mp_obj_t volume(mp_obj_t percent) {
     p4_audio_volume(mp_obj_get_int(percent));
     return mp_const_none;
@@ -692,6 +717,7 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&run_obj) },
     { MP_ROM_QSTR(MP_QSTR_run_status), MP_ROM_PTR(&run_status_obj) },
     { MP_ROM_QSTR(MP_QSTR_volume), MP_ROM_PTR(&volume_obj) },
+    { MP_ROM_QSTR(MP_QSTR_dock), MP_ROM_PTR(&dock_obj) },
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&keys_obj) },

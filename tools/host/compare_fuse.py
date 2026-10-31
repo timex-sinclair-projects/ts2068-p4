@@ -100,13 +100,14 @@ def timing_table(fuse_cpu, our_cpu):
         print("         %d %-20s %5d  %5d" % (i, what, fuse_cpu[reg], our_cpu[reg]))
 
 
-def run_fuse(fuse, home, ex, frames, outdir):
+def run_fuse(fuse, home, ex, frames, outdir, dock=None):
     os.makedirs(outdir, exist_ok=True)
     subprocess.run([fuse, "--machine", "ts2068", "--rom-ts2068-0", home,
                     "--rom-ts2068-1", ex, "--no-sound",
                     "--automation-output", outdir,
                     "--automation-frames", str(frames),
-                    "--automation-capture-screen"],
+                    "--automation-capture-screen"] +
+                   (["--dock", dock] if dock else []),
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                    cwd=os.path.dirname(fuse))
     with open(os.path.join(outdir, "result.json")) as f:
@@ -114,11 +115,13 @@ def run_fuse(fuse, home, ex, frames, outdir):
     return r["state"]["cpu"], Image.open(os.path.join(outdir, "screen.png")).convert("RGB")
 
 
-def run_ours(run, home, ex, frames, outdir, ts2068):
+def run_ours(run, home, ex, frames, outdir, ts2068, dock=None):
     os.makedirs(outdir, exist_ok=True)
     state, screen = os.path.join(outdir, "state.json"), os.path.join(outdir, "screen.ppm")
     cmd = [run, "--rom0", home, "--rom1", ex, "--frames", str(frames),
            "--state", state, "--screen", screen]
+    if dock:
+        cmd += ["--dock", dock]
     if not ts2068:
         cmd.append("--fuse-contention")
     subprocess.run(cmd, check=True)
@@ -150,6 +153,7 @@ def main():
     ap.add_argument("--ts2068", action="store_true",
                     help="our TS2068 contention (DOCK/EXROM never contended); "
                          "the timing ROM must then differ from Fuse as expected")
+    ap.add_argument("--dock", help="a .dck cartridge in both, with --rom stock")
     a = ap.parse_args()
 
     run = RUN + ("-jls" if a.core == "jls" else "")
@@ -161,8 +165,9 @@ def main():
         for name, home, ex in roms(a.rom, tmp):
             for n in frames:
                 d = os.path.join(tmp, "%s-%d" % (name, n))
-                fc, fs = run_fuse(a.fuse, home, ex, n, os.path.join(d, "fuse"))
-                oc, os_ = run_ours(run, home, ex, n, os.path.join(d, "ours"), a.ts2068)
+                dock = a.dock and os.path.abspath(a.dock)
+                fc, fs = run_fuse(a.fuse, home, ex, n, os.path.join(d, "fuse"), dock)
+                oc, os_ = run_ours(run, home, ex, n, os.path.join(d, "ours"), a.ts2068, dock)
                 regs = [k for k in CPU_KEYS if fc[k] != oc[k]]
                 bad, first = screen_diff(os_, fs)
                 ok = not regs and not bad

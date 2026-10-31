@@ -46,6 +46,19 @@ typedef struct {
 int ts2068_init( const ts2068_config_t *config );
 void ts2068_reset( int hard_reset );
 
+/* A DOCK cartridge from a .dck file (Fuse's format: blocks of a bank ID,
+   0 DOCK, 254 EXROM or 255 HOME, eight chunk types, 0 none, 1 RAM, 2
+   ROM, 3 RAM with contents, then the 8K chunks that have contents). The
+   file is copied, into one allocation. As in Fuse, the cartridge's RAM
+   starts again from the file at each hard reset; reset after inserting
+   or ejecting (Fuse resets softly), so the ROM finds the cartridge as it
+   boots. 0, or an error: */
+#define TS2068_DCK_CORRUPT  -1
+#define TS2068_DCK_MEMORY   -2
+int ts2068_dock_insert( const uint8_t *file, size_t size );
+void ts2068_dock_eject( void );
+int ts2068_dock_present( void );
+
 /* Run until the next frame interrupt: one 60.1145 Hz frame. */
 void ts2068_run_frame( void );
 uint32_t ts2068_frame_count( void );
@@ -126,8 +139,8 @@ void ts2068_snap_set( const ts2068_snap_t *snap );
    (machine/szx.c). Save writes the machine as it is now, between frames,
    into buf: uncompressed, TS2068_SZX_SIZE bytes; 0 if size is too
    small. Load restores one, compressed or not; 0, or a TS2068_SZX_ error.
-   A snapshot with DOCK pages (a cartridge) can't be loaded: this machine
-   has no DOCK. After an error in the RAM pages, HOME RAM may be partly
+   A snapshot with DOCK pages (a cartridge) can't be loaded, and a saved
+   one doesn't hold the cartridge. After an error in the RAM pages, HOME RAM may be partly
    loaded and the machine should be reset. */
 #define TS2068_SZX_SIZE ( 8 + 8 + 37 + 8 + 8 + 6 + 8 + 5 + 3 * ( 8 + 3 + 0x4000 ) + \
                           8 + 18 + 8 + 2 + 8 + 2 )

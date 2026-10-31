@@ -6,7 +6,7 @@
                 [--screen screen.ppm] [--ram ram.bin] [--time] [--bench]
                 [--audio audio.raw [--rate 44100]]
                 [--load-szx in.szx] [--save-szx out.szx]
-                [--call ADDR code.bin]
+                [--call ADDR code.bin] [--dock cart.dck]
 
    --rom1 may be 8K or 16K. A 32K TS-Pico ROM can be given as --rom alone:
    its first half is HOME, its second the EXROM. No TS-Pico is attached,
@@ -18,7 +18,8 @@
    still come from --rom/--rom0/--rom1); --save-szx writes one after the
    last (machine/szx.c). --call puts code.bin at ADDR once the ROM has
    booted and calls it, as RANDOMIZE USR ADDR would: it returns to where
-   the ROM was waiting for a key (test/basic/q10probe.asm). */
+   the ROM was waiting for a key (test/basic/q10probe.asm). --dock
+   inserts a cartridge and resets, as Fuse's --dock does. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,7 +121,7 @@ main( int argc, char **argv )
   const char *rom = NULL, *rom0 = NULL, *rom1 = NULL;
   const char *state = NULL, *screen = NULL, *ramfile = NULL, *audio = NULL;
   const char *load_szx = NULL, *save_szx = NULL;
-  const char *call_file = NULL;
+  const char *call_file = NULL, *dock = NULL;
   unsigned call_addr = 0;
   FILE *audio_f = NULL;
   unsigned frames = 100, i;
@@ -144,6 +145,7 @@ main( int argc, char **argv )
     else if( !strcmp( a, "--rate" ) && v ) { rate = atoi( v ); i++; }
     else if( !strcmp( a, "--load-szx" ) && v ) { load_szx = v; i++; }
     else if( !strcmp( a, "--save-szx" ) && v ) { save_szx = v; i++; }
+    else if( !strcmp( a, "--dock" ) && v ) { dock = v; i++; }
     else if( !strcmp( a, "--call" ) && v && i + 2 < (unsigned)argc ) {
       call_addr = strtoul( v, NULL, 0 ); call_file = argv[ i + 2 ]; i += 2;
     }
@@ -174,6 +176,15 @@ main( int argc, char **argv )
     if( ts2068_sound_init( rate ) ) { fprintf( stderr, "sound: bad rate\n" ); return 1; }
     audio_f = fopen( audio, "wb" );
     if( !audio_f ) { perror( audio ); return 1; }
+  }
+
+  if( dock ) {
+    size_t n;
+    unsigned char *d = load( dock, &n );
+    int err = ts2068_dock_insert( d, n );
+    if( err ) { fprintf( stderr, "%s: can't insert (%d)\n", dock, err ); return 1; }
+    free( d );
+    ts2068_reset( 0 );
   }
 
   if( load_szx ) {

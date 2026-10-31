@@ -9,7 +9,10 @@
 # settings are emu.py's. The main page:
 #
 #   <the ROM>
+#   <the cartridge, if one is in>
 #   Load ROM          a ROM from /TS2068/ROMS, kept as the setting
+#   Cartridge         one from /TS2068/DOCK, or eject it; the machine
+#                     restarts with it, and it's kept as the setting
 #   Load snapshot     from /TS2068/SNAPS
 #   Save snapshot     to SNAPS, as SNAPnnn.szx, the next number free
 #   Reset             the machine started again from the settings
@@ -36,7 +39,7 @@ SMALL = 16                              # added: the small size in tall rows
 LIST_ROWS = 7                           # rows 1-7 of a list page
 _VOLUME = "Vol\t-\t%d\t+"                # tab stops: - at x 92, + at 184
 
-_page = None                            # "main", "roms", "snaps" or "kbd"
+_page = None                            # "main", "roms", "dock", "snaps" or "kbd"
 _items = []
 _top = 0
 _status = ""
@@ -58,14 +61,14 @@ def _main():
     _page = "main"
     s = emu.settings()
     _row(0, s["rom"], INVERSE)
-    _row(1, "")
+    _row(1, s["dock"] and "Cartridge: " + s["dock"], PLAIN + SMALL)
     _row(2, "Load ROM", BUTTON)
-    _row(3, "Load snapshot", BUTTON)
-    _row(4, "Save snapshot", BUTTON)
-    _row(5, "Reset", BUTTON)
-    _row(6, "Keyboard", BUTTON)
-    _row(7, _VOLUME % s["volume"])
-    _row(8, "")
+    _row(3, "Cartridge", BUTTON)
+    _row(4, "Load snapshot", BUTTON)
+    _row(5, "Save snapshot", BUTTON)
+    _row(6, "Reset", BUTTON)
+    _row(7, "Keyboard", BUTTON)
+    _row(8, _VOLUME % s["volume"])
     _say(_status)
 
 
@@ -118,21 +121,24 @@ def _tap_main(row, x):
         _roms_found = _roms()
         _list("roms", "Load ROM", [n for n, _ in _roms_found])
     elif row == 3:
-        _list("snaps", "Load snapshot", emu.snapshots())
+        cart = emu.settings()["dock"]
+        _list("dock", "Cartridge", (["Eject " + cart] if cart else []) + emu.docks())
     elif row == 4:
+        _list("snaps", "Load snapshot", emu.snapshots())
+    elif row == 5:
         name = _next_snap_name()
         _say("Saving...")
         emu.save_snapshot(name)
         _say("Saved " + name)
-    elif row == 5:
+    elif row == 6:
         _say("Resetting...")
         emu.start()
         _main()
         _say("Reset")
-    elif row == 6:
+    elif row == 7:
         name = btkbd.saved()
         _list("kbd", "Keyboard", ["Pair a keyboard"] + (["Forget " + name] if name else []))
-    elif row == 7:
+    elif row == 8:
         s = emu.settings()
         v = s["volume"]
         if 70 <= x < 130:
@@ -143,7 +149,7 @@ def _tap_main(row, x):
             return
         ts2068.volume(v)
         emu.save(volume=v)
-        _row(7, _VOLUME % v)
+        _row(8, _VOLUME % v)
 
 
 def _tap_list(row, x):
@@ -168,6 +174,15 @@ def _tap_list(row, x):
         else:
             btkbd.forget()
         _say(btkbd.status())
+    elif _page == "dock":
+        name = _items[n]
+        if name.startswith("Eject ") and n == 0 and emu.settings()["dock"]:
+            name = ""
+        _say("Starting with " + name if name else "Ejecting...")
+        emu.save(dock=name)
+        emu.start()
+        _main()
+        _say("Started with " + name if name else "Ejected")
     elif _page == "roms":
         name, exrom = _roms_found[n]
         _say("Starting " + name)
