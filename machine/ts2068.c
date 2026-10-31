@@ -35,6 +35,7 @@
 
 #include "machine.h"
 #include "event.h"
+#include "sound/sound.h"
 #include "z80_core.h"
 #include "z80_glue.h"
 
@@ -333,6 +334,8 @@ port_write( libspectrum_word port, libspectrum_byte b )
 
   case 0xfe:
     ula_last_byte = b;
+    /* Fuse's ula_write: MIC (bit 3) is active low, EAR (bit 4) high */
+    sound_ula( tstates, !( b & 0x08 ), !!( b & 0x10 ) );
     ula_default_value = 0x5f;   /* Fuse: ts2068_current->timex */
     break;
 
@@ -351,6 +354,7 @@ port_write( libspectrum_word port, libspectrum_byte b )
 
   case 0xf6:
     ay.registers[ ay.current_register ] = b & ay_mask[ ay.current_register ];
+    if( sound_enabled ) sound_ay_write( ay.current_register, b, tstates );
     break;
 
   case 0x0e: case 0x0f:
@@ -392,6 +396,7 @@ frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
   event_frame( TS2068_TSTATES_PER_FRAME );
   tstates -= TS2068_TSTATES_PER_FRAME;
   z80_frame( TS2068_TSTATES_PER_FRAME );
+  sound_frame( TS2068_TSTATES_PER_FRAME );
 
   /* display_render_frame: FLASH swaps every 16 frames */
   if( ++flash_frame_count == 16 ) {
@@ -468,6 +473,7 @@ ts2068_reset( int hard_reset )
 {
   if( hard_reset ) memset( ram, 0, sizeof( ram ) );
 
+  sound_ay_reset();             /* Fuse's machine_reset */
   event_reset();
   tstates = 0;
   event_add( TS2068_TSTATES_PER_FRAME, frame_event );
@@ -487,6 +493,21 @@ ts2068_reset( int hard_reset )
 }
 
 /* ---- for the platform -------------------------------------------------- */
+
+int
+ts2068_sound_init( int sample_rate )
+{
+  if( sound_init( sample_rate, TS2068_CPU_HZ, TS2068_TSTATES_PER_FRAME ) )
+    return -1;
+  sound_ay_reset();
+  return 0;
+}
+
+const int16_t *
+ts2068_sound_samples( int *count )
+{
+  return sound_samples( count );
+}
 
 libspectrum_byte
 ts2068_peek( libspectrum_word address )

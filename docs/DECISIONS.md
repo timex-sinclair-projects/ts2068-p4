@@ -110,3 +110,29 @@ The numbers are in NOTES.md, "Phase 3 progress". This answers Q9: the worst fram
 
 **Still open:** following the beam (Q7). The picture is drawn once a frame from screen RAM.
 
+## D7. Sound: Fuse's, paced by the I2S clock (2026-10-30)
+
+**Decided:**
+
+- **The model:** the TS2068's sound is Fuse's: `ay_engine.c`, `blipbuffer.c`, `tv_filter.c` and `ula_filter.c` lifted into `machine/sound/`, with the part of `sound.c` and `output_mixer.c` that a TS2068 uses (the TV speaker route, mono).
+- **Output:** 44.1 kHz on the P4, to both amplifiers.
+- **Timing:** the I2S clock paces the frame loop. A frame's samples are written after it's drawn, and the write waits for room.
+
+The numbers are in NOTES.md, "Phase 3 progress".
+
+**Why:**
+
+- **Fuse's model:** the machine is already Fuse's, so its sound comes with the same timing: every port write lands at its T-state. It can be checked against fuse-tspico sample for sample, which it is (`make -C test/machine sound`). TSRun's mix, "modelled on schematic values", is unchecked (PLAN.md §1.4).
+- **The audio clock as master:** an I2S stream can't skip or repeat without a click, but the panel's triple buffers can absorb the small difference between the I2S clock and the panel's refresh. ESPectrum and TSRun pace by audio too.
+
+**Two changes from Fuse's code, both recorded in the files:**
+
+- **Blip_Buffer accuracy:** 32 bits with 64-bit resampled time on every platform. That's what Fuse's build uses where `long` is 64 bits. With the 16 it would get on the P4, a frame makes 733.4 samples instead of 733.6, and no sample matches.
+- **Filter arithmetic:** `float` on the P4, `double` (Fuse's) on the host. Software `double` cost 4.3 ms a frame. Float differs from Fuse by at most one least significant bit, in under 0.1% of samples.
+
+**Ruled out:**
+
+- **Fuse's 8-bit or stereo AY options:** the TS2068 is mono.
+- **48 kHz:** it matches Fuse too, but costs about 9% more filter work for nothing a TV speaker model can carry.
+- **Pacing by esp_timer with sound:** two clocks would drift, and the sound would underrun or overflow.
+

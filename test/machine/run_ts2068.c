@@ -4,11 +4,15 @@
      run_ts2068 --rom0 HOME.rom --rom1 EXROM.rom --frames N
                 [--fuse-contention] [--state state.json]
                 [--screen screen.ppm] [--ram ram.bin] [--time] [--bench]
+                [--audio audio.raw [--rate 44100]]
 
    --rom1 may be 8K or 16K. A 32K TS-Pico ROM can be given as --rom alone:
    its first half is HOME, its second the EXROM. No TS-Pico is attached,
    so ports 0Eh/0Fh read FFh, as in Fuse without --tspico. --bench types
-   the benchmark's BASIC loop once the ROM has booted (basic_loop.c). */
+   the benchmark's BASIC loop once the ROM has booted (basic_loop.c).
+   --audio writes every frame's sound as raw 16-bit mono samples in the
+   host's byte order, as Fuse's --automation-capture-audio writes into its
+   WAV. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,8 +89,10 @@ int
 main( int argc, char **argv )
 {
   const char *rom = NULL, *rom0 = NULL, *rom1 = NULL;
-  const char *state = NULL, *screen = NULL, *ramfile = NULL;
+  const char *state = NULL, *screen = NULL, *ramfile = NULL, *audio = NULL;
+  FILE *audio_f = NULL;
   unsigned frames = 100, i;
+  int rate = 44100;
   int timed = 0, bench = 0;
   ts2068_config_t cfg = { 0 };
   size_t n0, n1;
@@ -102,6 +108,8 @@ main( int argc, char **argv )
     else if( !strcmp( a, "--state" ) && v ) { state = v; i++; }
     else if( !strcmp( a, "--screen" ) && v ) { screen = v; i++; }
     else if( !strcmp( a, "--ram" ) && v ) { ramfile = v; i++; }
+    else if( !strcmp( a, "--audio" ) && v ) { audio = v; i++; }
+    else if( !strcmp( a, "--rate" ) && v ) { rate = atoi( v ); i++; }
     else if( !strcmp( a, "--fuse-contention" ) ) cfg.fuse_dock_contention = 1;
     else if( !strcmp( a, "--time" ) ) timed = 1;
     else if( !strcmp( a, "--bench" ) ) bench = 1;
@@ -125,12 +133,23 @@ main( int argc, char **argv )
   cfg.exrom = b1;
   cfg.exrom_size = n1;
   if( ts2068_init( &cfg ) ) { fprintf( stderr, "EXROM: not 8K or 16K\n" ); return 1; }
+  if( audio ) {
+    if( ts2068_sound_init( rate ) ) { fprintf( stderr, "sound: bad rate\n" ); return 1; }
+    audio_f = fopen( audio, "wb" );
+    if( !audio_f ) { perror( audio ); return 1; }
+  }
 
   t0 = clock();
   for( i = 0; i < frames; i++ ) {
     if( bench ) basic_loop_frame( i );
     ts2068_run_frame();
+    if( audio_f ) {
+      int count;
+      const int16_t *samples = ts2068_sound_samples( &count );
+      fwrite( samples, sizeof( *samples ), count, audio_f );
+    }
   }
+  if( audio_f ) fclose( audio_f );
   if( timed ) {
     double s = (double)( clock() - t0 ) / CLOCKS_PER_SEC;
     fprintf( stderr, "%u frames in %.3f s: %.1f us/frame, %.0fx real time\n",

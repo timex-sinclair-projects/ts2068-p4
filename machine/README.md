@@ -12,8 +12,11 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 | `ts2068.c` | The machine. Fuse's `machines/ts2068.c` and `tc2068.c`, `peripherals/scld.c`, `ula.c` and `sound/ay.c` (the register file), `machines/machines_periph.c` (the Timex AY ports), `spectrum.c` (the frame event and contention delay), `machine.c` (timings), `periph.c` (port I/O and its contention) and `memory_pages.c` (memory access), in one file. `display_render.c`'s Timex modes for `ts2068_render` |
 | `z80_machine.h` | The contention macros `z80_glue.h` asks for: Fuse's, keyed on one flag per 8K chunk |
 | `event.c`, `event.h` | Fuse's event queue semantics (time, then type; a new event before an equal one) in a fixed array, without glib |
+| `sound/` | The sound (DECISIONS.md D7): Fuse's `sound/ay_engine.c`, `blipbuffer.c`, `tv_filter.c` and `ula_filter.c`, with includes adjusted, and `sound.c`, the part of Fuse's `sound.c` and `sound/output_mixer.c` a TS2068 uses (the TV speaker route, mono). `ts2068_sound_init` and `ts2068_sound_samples` in `machine.h` are the platform's view of it |
 
 ## How it differs from Fuse
+
+- **Sound:** `make -C test/machine sound` runs three ROMs (the sound test `test/basic/sound.asm`, the stock ROM and the TS-Pico ROM) here and in fuse-tspico at 44.1 and 48 kHz, and every sample matches. Two things in `sound/` differ from Fuse's source. Blip_Buffer's accuracy is 32 bits on every platform, which is what Fuse's own 64-bit builds use. The filters can be built in `float` (`sound/sound_real.h`, which the P4 build does); that differs from Fuse's `double` by at most one least significant bit.
 
 - **Memory:** Fuse's 2K `memory_page` tables, `RAM[65][0x4000]` (1,040 KB) and memory pool become three 8K-chunk tables (read pointer, write pointer or NULL, contended) over 48K of RAM, a 16K HOME ROM, a 16K EXROM and one 8K FFh chunk for the empty DOCK. The paging is Fuse's `tc2068_memory_map`.
 - **Contention:** one 58,688-entry delay table (Fuse keeps two of 80,000, identical on the TS2068), filled from Fuse's `spectrum_contend_delay_65432100`. That's still the Spectrum's pattern, and whether the SCLD contends like this is unmeasured (PLAN.md §1.6, Q10). A chunk is contended only when HOME RAM5 is mapped there. `fuse_dock_contention` restores Fuse's rule, which contends DOCK and EXROM at 0x4000–0x7FFF too.
@@ -23,6 +26,5 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 ## Not yet here
 
 - **The display follows the beam in Fuse** (docs/NOTES.md, Q7): `display.c`, `display_dirty.c`, `display_border.c`. `ts2068_render` (or `ts2068_render_line`, one line at a time, which the P4 display uses) draws from screen RAM once a frame, so mid-frame mode, colour and border changes don't show yet. Fuse's dirty-line tracking would also save the P4 display about 2.4 ms a frame of rendering and hashing unchanged lines (docs/NOTES.md, "Phase 3 progress").
-- **Sound:** the beeper (port FE bit 4), and the AY's tone generation (`sound/ay_engine.c`, `blipbuffer.c`, `output_mixer.c`). The AY's registers are kept.
 - **DOCK cartridges** (`dck.c`): the DOCK reads FFh.
 - **Snapshots, RZX, the debugger, the tape and SLT traps:** not planned. The TS-Pico is the tape.

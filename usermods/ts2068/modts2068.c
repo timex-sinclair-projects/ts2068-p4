@@ -5,8 +5,10 @@
 //   ts2068.bench(home_rom, exrom)    # starts on core 0, returns at once
 //   ts2068.status()                  # -> dict; state "done" when finished
 //
-//   ts2068.run(home_rom, exrom)      # real time on core 0, drawn on the panel
+//   ts2068.run(home_rom, exrom)      # real time on core 0, drawn on the panel,
+//                                    # with sound
 //   ts2068.run_status()              # -> dict of frame timings
+//   ts2068.volume(10)                # 0-100
 //   ts2068.stop()
 //   ts2068.display_check()           # -> pixels differing from the machine
 //
@@ -31,6 +33,7 @@
 
 #include "basic_loop.h"
 #include "machine.h"
+#include "p4_audio.h"
 #include "p4_display.h"
 #include "z80_core.h"
 
@@ -38,6 +41,7 @@
 #define BENCH_PRIORITY 5
 #define BENCH_STACK 4096
 #define FRAME_BUDGET_US 16635           // one 60.1145 Hz frame
+#define SAMPLE_RATE 44100
 #define HIST_BUCKETS 20                 // 1 ms each; the last takes the rest
 
 static struct {
@@ -54,12 +58,13 @@ static struct {
 // run(): see below
 static struct {
     volatile bool running, stop;
-    bool demo;
+    bool demo, sound;
     volatile uint32_t frame;
     uint32_t late;
     uint64_t emu_us, display_us;
     uint32_t emu_max, display_max, work_max;
     int64_t started;
+    uint64_t audio_wait_us;
 } r;
 static esp_timer_handle_t tick;
 static TaskHandle_t run_handle;
@@ -134,13 +139,17 @@ static mp_obj_t bench(size_t n_args, const mp_obj_t *args) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bench_obj, 2, 4, bench);
 
-// run(home_rom, exrom, demo=False, redraw_all=False): the machine in real
-// time on core 0,
-// each frame drawn on the panel (platform/p4_display.c). An esp_timer
-// wakes the task at 60.1145 Hz; a tick that comes while a frame is still
-// running is counted as late. demo=True types the benchmark's BASIC loop
-// once the ROM has booted. redraw_all=True converts every line of every
-// frame, for measuring the display's worst case. No sound or keyboard yet.
+// run(home_rom, exrom, demo=False, redraw_all=False, sound=True): the
+// machine in real time on core 0, each frame drawn on the panel
+// (platform/p4_display.c). With sound, each frame's samples go to the
+// speakers (platform/p4_audio.c), and waiting for room in the I2S buffers
+// paces the frames: the audio clock is the master. Without, an esp_timer
+// wakes the task at 60.1145 Hz, and a tick that comes while a frame is
+// still running is counted as late. demo=True types the benchmark's BASIC
+// loop once the ROM has booted. redraw_all=True converts every line of
+// every frame, for measuring the display's worst case. The sound can't be
+// turned off once a run has had it (ts2068_sound_init is once only), so
+// compare sound=False on a fresh boot. No keyboard yet.
 
 
 static void tick_cb(void *arg) {
@@ -151,11 +160,13 @@ static void tick_cb(void *arg) {
 static void run_task(void *arg) {
     (void)arg;
     while (!r.stop) {
-        uint32_t n = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
-        if (n == 0) {
-            continue;
+        if (!r.sound) {
+            uint32_t n = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+            if (n == 0) {
+                continue;
+            }
+            r.late += n - 1;
         }
-        r.late += n - 1;
         if (r.demo) {
             basic_loop_frame(r.frame);
         }
@@ -176,9 +187,18 @@ static void run_task(void *arg) {
         if (t2 - t0 > r.work_max) {
             r.work_max = t2 - t0;
         }
+        if (r.sound) {
+            int count;
+            const int16_t *samples = ts2068_sound_samples(&count);
+            r.audio_wait_us += p4_audio_write(samples, count);
+        }
         r.frame++;
     }
-    esp_timer_stop(tick);
+    if (r.sound) {
+        p4_audio_stop();
+    } else {
+        esp_timer_stop(tick);
+    }
     r.running = false;
     vTaskDelete(NULL);
 }
@@ -207,23 +227,43 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     ts2068_config_t cfg = {
         .home_rom = home.buf, .exrom = ex.buf, .exrom_size = ex.len,
     };
+    bool sound = n_args <= 4 || mp_obj_is_true(args[4]);
+    if (sound && (err = p4_audio_init(SAMPLE_RATE)) != ESP_OK) {
+        mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("audio: %s"),
+            esp_err_to_name(err));
+    }
     if (ts2068_init(&cfg)) {
         mp_raise_ValueError(MP_ERROR_TEXT("EXROM: not 8K or 16K"));
     }
+    if (sound && ts2068_sound_init(SAMPLE_RATE)) {
+        mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("sound"));
+    }
     memset(&r, 0, sizeof(r));
+    r.sound = sound;
     r.demo = n_args > 2 && mp_obj_is_true(args[2]);
     p4_display_redraw_all(n_args > 3 && mp_obj_is_true(args[3]));
     r.running = true;
+    if (sound) {
+        p4_audio_start();
+    }
     if (xTaskCreatePinnedToCore(run_task, "ts2068", BENCH_STACK, NULL,
         BENCH_PRIORITY, &run_handle, BENCH_CORE) != pdPASS) {
         r.running = false;
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("run task"));
     }
     r.started = esp_timer_get_time();
-    esp_timer_start_periodic(tick, FRAME_BUDGET_US);
+    if (!sound) {
+        esp_timer_start_periodic(tick, FRAME_BUDGET_US);
+    }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(run_obj, 2, 4, run);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(run_obj, 2, 5, run);
+
+static mp_obj_t volume(mp_obj_t percent) {
+    p4_audio_volume(mp_obj_get_int(percent));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(volume_obj, volume);
 
 static mp_obj_t stop(void) {
     if (r.running) {
@@ -290,6 +330,8 @@ static MP_DEFINE_CONST_FUN_OBJ_0(status_obj, status);
 // panel's refreshes; frames drawn, unchanged (nothing to draw) and
 // replaced (drawn over before the panel showed them); TS2068 lines
 // converted in all, and the mean and max time of a frame that was drawn.
+// With sound: samples written, underruns (the I2S ran dry), and the mean
+// and max wait for room in its buffers (audio_wait_us, audio_wait_max).
 static mp_obj_t run_status(void) {
     mp_obj_t d = mp_obj_new_dict(0);
     uint32_t n = r.frame ? r.frame : 1;
@@ -314,6 +356,14 @@ static mp_obj_t run_status(void) {
     store(d, MP_QSTR_draw_us, mp_obj_new_int_from_uint(s.drawn ? s.draw_us_total / s.drawn : 0));
     store(d, MP_QSTR_draw_max, mp_obj_new_int_from_uint(s.draw_us_max));
     store(d, MP_QSTR_flip_max, mp_obj_new_int_from_uint(s.flip_us_max));
+    if (r.sound) {
+        p4_audio_stats_t a;
+        p4_audio_get_stats(&a);
+        store(d, MP_QSTR_samples, mp_obj_new_int_from_ull(a.samples));
+        store(d, MP_QSTR_underruns, mp_obj_new_int_from_uint(a.underruns));
+        store(d, MP_QSTR_audio_wait_us, mp_obj_new_int_from_uint(r.audio_wait_us / n));
+        store(d, MP_QSTR_audio_wait_max, mp_obj_new_int_from_uint(a.wait_us_max));
+    }
     return d;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(run_status_obj, run_status);
@@ -324,6 +374,7 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_status), MP_ROM_PTR(&status_obj) },
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&run_obj) },
     { MP_ROM_QSTR(MP_QSTR_run_status), MP_ROM_PTR(&run_status_obj) },
+    { MP_ROM_QSTR(MP_QSTR_volume), MP_ROM_PTR(&volume_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_display_check), MP_ROM_PTR(&display_check_obj) },
 };

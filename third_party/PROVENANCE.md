@@ -29,17 +29,22 @@ One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note a
 | `machine/ts2068.c` | `third_party/fuse-tspico` | `machines/ts2068.c`, `machines/tc2068.c`, `machines/machines_periph.c`, `peripherals/scld.c`, `peripherals/ula.c`, `peripherals/sound/ay.c`, `spectrum.c`, `machine.c`, `periph.c`, `memory_pages.c`, `display_render.c` | `a43958d` | Merged into one file and cut to the TS2068: 8K-chunk memory tables, a port switch, one contention table; DOCK and EXROM not contended. See `machine/README.md` |
 | `machine/z80_machine.h` | `third_party/fuse-tspico` | `z80/z80_macros.h` (the contention macros) | `a43958d` | Keyed on an 8K-chunk flag instead of `memory_map_read[].contended` |
 | `machine/event.c` | `third_party/fuse-tspico` | `event.c` (semantics only; rewritten) | `a43958d` | A fixed array, no glib |
+| `machine/sound/ay_engine.c`, `ay_engine.h`, `tv_filter.c`, `tv_filter.h`, `ula_filter.c`, `ula_filter.h` | `third_party/fuse-tspico` | `sound/` (same names) | `a43958d` | Includes adjusted; the AY engine's peripheral check removed (the TS2068 always has its AY); the filters' arithmetic is `sound_real` (`double`, or `float` on the P4) |
+| `machine/sound/blipbuffer.c`, `blipbuffer.h` | `third_party/fuse-tspico` | `sound/blipbuffer.c`, `blipbuffer.h` | `a43958d` | LGPL-2.1-or-later (Shay Green's Blip_Buffer 0.4.0, in C by Gergely Szasz). Accuracy 32 bits with `uint64_t` resampled time, as Fuse's 64-bit builds have it |
+| `machine/sound/sound.c`, `sound.h` | `third_party/fuse-tspico` | `sound.c`, `sound/output_mixer.c` | `a43958d` | Cut to the TS2068: the TV speaker route, mono, default volumes, no main buffer, 100 ms Blip_Buffers |
+| `test/basic/sound.asm` | (ours) | | | The sound test ROM |
 | `z80_jls/z80_jls.cpp`, `z80_jls/z80_jls.h` | `third_party/ZX-ESPectrum-IDF` | `src/Z80_JLS.cpp`, `include/Z80_JLS/z80.h` | `2a2c335` | GPL-3.0. ESPectrum's hooks removed (TR-DOS, tape traps, video, CPU loop); `step`, `takeINT` and the `z80_core.h` functions added. Not linked by default. See `z80_jls/README.md` |
 | `z80_jls/z80_jls_ops.h` | `third_party/ZX-ESPectrum-IDF` | `include/Z80_JLS/z80operations.h` (replaced) | `2a2c335` | Rewritten on `z80/z80_glue.h` |
 
 ## Facts taken from other sources
 
-No code is copied from these. `platform/p4_display.c` uses their values (register writes, timings, pins), as noted at the top of the file.
+No code is copied from these. `platform/p4_display.c` and `platform/p4_audio.c` use their values (register writes, timings, pins), as noted at the top of the file.
 
 | Source | Version | License | What |
 |---|---|---|---|
 | Elecrow `CrowPanel-Advanced-7inch-ESP32-P4-HMI-AI-Display-1024x600-IPS-Touch-Screen`, `example/V1.2/idf-code/Lesson07-Turn_on_the_screen` (not a submodule; cloned to `~/esp/ref/crowpanel-p4`) | `f0ebc0c` | none stated | DSI lanes and rate, DPI timing, LDO3 at 2.5 V, backlight on GPIO31 |
 | Espressif `esp_lcd_ek79007` (component registry, as vendored in that example) | 1.0.2 | Apache-2.0 | The EK79007's start-up register writes |
+| Elecrow, same repo, `example/V1.2/idf-code/Lesson12-Playing_Loca_Music_from_SD_Card` | `f0ebc0c` | none stated | I2S pins (LRCLK 21, BCLK 22, DATA 23), the Philips 16-bit stereo format, the amplifier enable on GPIO30, active low (`platform/p4_audio.c`) |
 
 ## Not used
 

@@ -231,7 +231,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 ### Phase 3: P4 platform layer
 - [ ] **Build system:** ESP-IDF components (CMake) for each layer. No autotools.
 - [ ] **Display:** 1024×600 panel. The TS2068's 320×240 picture (screen plus border) doubled is 640×480, which leaves a 384-pixel side panel. Handle hi-res and decide whether to follow the beam (Q7); TSRun's raster model is the reference description. *2026-10-30: the panel runs from `platform/p4_display.c`, with the machine in real time on core 0 and a frame drawn once per TS2068 frame (DECISIONS.md D6). Hi-res is drawn, since the 640-wide picture holds it. Beam following is still to do.*
-- [ ] **Audio:** I2S to the onboard amplifier, carrying the SCLD beeper and the AY. Pace the frame loop by the audio, as ESPectrum and TSRun both do, and emit edges at the T-state they happen.
+- [ ] **Audio:** I2S to the onboard amplifier, carrying the SCLD beeper and the AY. Pace the frame loop by the audio, as ESPectrum and TSRun both do, and emit edges at the T-state they happen. *2026-10-30: done for the machine as it runs now (DECISIONS.md D7). Fuse's sound is in `machine/sound/`, matching fuse-tspico sample for sample, and `platform/p4_audio.c` drives the amplifiers, with the I2S clock pacing the frames. To check by ear on the panel.*
 - [ ] **Storage:** microSD for ROMs, settings and snapshots.
 - [ ] **Input, stage 1:** an on-screen TS2068 keyboard with multi-touch, so CAPS SHIFT and SYMBOL SHIFT combinations work.
 - [ ] **Input, stage 2:** a physical keyboard, decided by Q3/Q4. Options: USB host, BLE via the C6, or a real matrix keyboard on an I2C GPIO expander.

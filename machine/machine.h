@@ -75,6 +75,20 @@ void ts2068_render( uint8_t *pixels );
    all 150K of it. */
 void ts2068_render_line( int line, uint8_t *row );
 
+/* Sound: Fuse's TS2068 sound, the ULA (port FE's MIC and EAR bits) and
+   the AY, through Fuse's TV speaker model, in mono. Off until
+   ts2068_sound_init(), which makes each frame produce samples at
+   sample_rate (Hz); call it after ts2068_init() and before the first
+   frame, as Fuse starts its sound before the machine runs. Once only.
+   0 on success, -1 if out of memory or the rate is too low (the TV
+   filter needs more than 20 kHz). */
+int ts2068_sound_init( int sample_rate );
+
+/* The samples the last frame made, 16-bit signed: about sample_rate /
+   60.1145 of them (733 or 734 at 44.1 kHz), *count says how many. Valid
+   until the next frame. */
+const int16_t *ts2068_sound_samples( int *count );
+
 /* The CPU and SCLD state, for tests and the comparison against Fuse. */
 typedef struct {
   uint16_t af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc;

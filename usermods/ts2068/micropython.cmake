@@ -1,6 +1,6 @@
 # ts2068: the emulated TS2068 (machine/ on a Z80 core) as a MicroPython
 # user C module: the Phase 2 benchmark, and the machine in real time on the
-# panel (platform/p4_display.c).
+# panel (platform/p4_display.c) with sound (machine/sound/, platform/p4_audio.c).
 #
 # The Z80 core is Fuse's (z80/) unless the environment says
 # TS2068_CORE=jls at configure time, which builds Z80_JLS (z80_jls/)
@@ -33,9 +33,15 @@ target_sources(usermod_ts2068 INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/modts2068.c
     ${TS2068_ROOT}/machine/ts2068.c
     ${TS2068_ROOT}/machine/event.c
+    ${TS2068_ROOT}/machine/sound/sound.c
+    ${TS2068_ROOT}/machine/sound/ay_engine.c
+    ${TS2068_ROOT}/machine/sound/blipbuffer.c
+    ${TS2068_ROOT}/machine/sound/tv_filter.c
+    ${TS2068_ROOT}/machine/sound/ula_filter.c
     ${TS2068_CORE_SRC}
     ${TS2068_ROOT}/test/machine/basic_loop.c
     ${TS2068_ROOT}/platform/p4_display.c
+    ${TS2068_ROOT}/platform/p4_audio.c
 )
 
 target_include_directories(usermod_ts2068 INTERFACE
@@ -48,10 +54,13 @@ target_include_directories(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}              # z80_ops.c includes "z80/opcodes_base.c"
 )
 
-target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY)
+# SOUND_REAL: the sound filters in float, which the P4's FPU does, not
+# Fuse's double, which it doesn't (machine/sound/sound_real.h)
+target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY SOUND_REAL=float)
 
 # MicroPython's main component doesn't ask for these IDF components, but
 # they're in the build
-target_link_libraries(usermod_ts2068 INTERFACE idf::esp_lcd idf::esp_driver_ledc idf::esp_driver_ppa)
+target_link_libraries(usermod_ts2068 INTERFACE idf::esp_lcd idf::esp_driver_ledc idf::esp_driver_ppa
+    idf::esp_driver_i2s idf::esp_driver_gpio)
 
 target_link_libraries(usermod INTERFACE usermod_ts2068)

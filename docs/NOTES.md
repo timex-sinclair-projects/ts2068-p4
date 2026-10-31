@@ -313,3 +313,33 @@ DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS
 - **Space:** `micropython.bin` is now about 0x1d4200 of 0x1f0000 (94%).
 - **Gotcha:** adding a qstr that frozen modules already use (`core`, `run`) fails with `redeclaration of enumerator 'MP_QSTR_…'` in `frozen_content.c`. That file isn't regenerated when the usermod's qstrs change. Delete `build-…/frozen_content.c` and rebuild.
 
+**Sound works, the same as Fuse's (DECISIONS.md D7).** `ts2068.run(home, exrom)` now has sound by default. `sound=False` (the fifth argument) uses the timer instead. `ts2068.volume(0–100)` sets the level; the default is 10 (50 was far too loud on the panel).
+
+- **Fuse's sound for a TS2068**, lifted into `machine/sound/`:
+  - Fuse gives the TS2068 no beeper of its own (libspectrum's TS2068 has no BEEPER capability), so its speaker type resolves to TV.
+  - The ULA level from port FE goes through `ula_filter`: EAR (bit 4) is 50×256, and MIC (bit 3, active low) adds 2×256.
+  - The AY goes into the TV buffer.
+  - The sum goes through `tv_filter`, a band-pass from 100 Hz to 10 kHz. The output is mono.
+  - `sound_ula` is called at the port FE write, `sound_ay_write` at the port F6 write, and `sound_ay_reset` at reset. `sound_frame` runs in the frame event after `tstates` is reduced, as in Fuse's `spectrum_frame`.
+- **Checked sample for sample (2026-10-30):** `make -C test/machine sound` runs three ROMs in fuse-tspico (`--automation-capture-audio`) and in `run_ts2068 --audio`, at 44.1 and 48 kHz, for 300 frames.
+  - The ROMs: the sound test (`test/basic/sound.asm`: a beeper sweep, MIC alone, AY tones, noise, four envelope shapes, sample playback by R8 writes, and the beeper with an AY tone), the stock ROM and the TS-Pico ROM.
+  - Every sample matches.
+  - The float build (`run_ts2068-float`, the P4's arithmetic) differs by 1 in 160 of 220,079 samples, and never by more.
+- **Blip_Buffer's accuracy has to be 32 bits.** Fuse's `configure.ac` sets `BLIP_BUFFER_ACCURACY` to 32 wherever `long` is 64 bits, and leaves it at 16 otherwise. The reference build on macOS has 32.
+  - At 16, the resampling factor rounds to 819/65536, so a frame makes 733.4 samples at 44.1 kHz instead of 733.6. That puts the samples at slightly different times, and nothing matched.
+  - The lifted `blipbuffer.c` keeps resampled time in `uint64_t` and uses 32 on every platform, including the P4, where `long` is 32 bits. A Fuse built for a 32-bit platform would not match its own macOS build.
+- **On the P4:** two NS4168 amplifiers on I2S (LRCLK 21, BCLK 22, DATA 23), one on each channel, enabled by GPIO30 low. The pins and the Philips 16-bit stereo format come from Elecrow's Lesson12.
+  - `platform/p4_audio.c` writes each mono sample to both channels. The DMA buffer is 4 × 256 frames, about 23 ms.
+  - `run()` with sound has no timer: it runs a frame, draws it, then writes the frame's samples, waiting for room. The I2S clock is the master.
+- **Fuse's `double` filters cost 4.3 ms a frame on the P4,** whose FPU is single precision only. The filters and the mix now use `sound_real` (`machine/sound/sound_real.h`): `double` on the host, `float` in the P4 build. That brought the sound down to about 1.5 ms. The rest is the AY engine (1,834 steps a frame) and Blip_Buffer.
+
+| Per frame, on core 0 | Z80 + sound | Display max | Worst frame | Frames/s | Underruns |
+|---|---|---|---|---|---|
+| Sound ROM, no sound (timer) | 2.7 ms | 7.1 ms | 10.2 ms | 60.04 | (0 late) |
+| Sound ROM, `double` filters | 7.0 ms | 7.1 ms | 13.6 ms | 60.10 | 0 |
+| **Sound ROM, `float` filters** | **4.2 ms** | 7.1 ms | **12.3 ms** | 60.10 | 0 |
+| **Stock ROM, BASIC demo, 60 s** | **4.2 ms** | 7.4 ms | **12.0 ms** | 60.11 | 0 |
+
+- The I2S clock divides down to 44,096 Hz, not 44,100, so frames run at 60.11 Hz, 0.01% slow. The panel's 60.10 Hz is close enough that no frames were replaced.
+- **Space:** `micropython.bin` is now 0x1dea50 of 0x1f0000 (97%), leaving 69 KB. The next layer (touch, keyboard, storage) will need a bigger app partition.
+

@@ -27,3 +27,4 @@ test/z80/coretest-jls
 test/z80/tests-jls.out
 test/z80/zexrun-jls
 test/machine/run_ts2068-jls
+test/machine/run_ts2068-float
