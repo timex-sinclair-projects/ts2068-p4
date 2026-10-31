@@ -7,11 +7,14 @@
 //
 //   ts2068.run(home_rom, exrom)      # real time on core 0, drawn on the panel,
 //                                    # with sound and the on-screen keyboard
+//   ts2068.run(home, ex, False, False, True, True)   # and the TS-Pico: ports
+//                                    # 0Eh/0Fh to the firmware via p4bridge
 //   ts2068.run_status()              # -> dict of frame timings
 //   ts2068.volume(10)                # 0-100
 //   ts2068.stop()
 //   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
 //   ts2068.load_snapshot(data)       # after run(), running or stopped
+//   ts2068.keys(rows)                # hold keys (8 half-rows); keys() releases
 //   ts2068.osd(row, text, style=0)   # the side panel's menu rows (osd.py)
 //   ts2068.osd_tap()                 # -> (row, column) of a tap, or None
 //   ts2068.display_check()           # -> pixels differing from the machine
@@ -37,6 +40,7 @@
 
 #include "basic_loop.h"
 #include "machine.h"
+#include "p4bridge.h"
 #include "p4_audio.h"
 #include "p4_display.h"
 #include "p4_keyboard.h"
@@ -73,7 +77,10 @@ static struct {
     uint32_t emu_max, display_max, work_max;
     int64_t started;
     uint64_t audio_wait_us, touch_us;
+    uint32_t pico_waits, pico_wait_max; // IN (0Eh) over 1 ms, and the longest
+    uint64_t pico_wait_us;
 } r;
+static uint8_t injected[8] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 static bool machine_ready;              // run() has initialised the machine
 
 // A snapshot asked for while the machine runs: the run task takes it
@@ -216,6 +223,9 @@ static void run_task(void *arg) {
             uint8_t rows[8];
             int n = p4_touch_read(points, P4_TOUCH_MAX);
             p4_keyboard_touch(points, n, rows);
+            for (int i = 0; i < 8; i++) {
+                rows[i] &= injected[i];
+            }
             p4_osd_touch(points, n);
             ts2068_set_keyboard(rows);
             r.touch_us += esp_timer_get_time() - t;
@@ -253,6 +263,25 @@ static void run_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+// Ports 0Eh/0Fh, from the run task on core 0, to the firmware on core 1.
+// The ops are the same numbers on both sides (machine.h, p4bridge.h).
+static uint8_t tspico_frame(uint8_t op, uint8_t value, void *ctx) {
+    if (op != TS2068_TSPICO_IN_DATA) {
+        return p4bridge_frame(op, value);
+    }
+    int64_t t = esp_timer_get_time();
+    uint8_t b = p4bridge_frame(op, value);
+    uint32_t dt = esp_timer_get_time() - t;
+    if (dt > 1000) {
+        r.pico_waits++;
+        r.pico_wait_us += dt;
+        if (dt > r.pico_wait_max) {
+            r.pico_wait_max = dt;
+        }
+    }
+    return b;
+}
+
 static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     if (r.running || b.state == RUNNING) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("already running"));
@@ -277,6 +306,12 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     ts2068_config_t cfg = {
         .home_rom = home.buf, .exrom = ex.buf, .exrom_size = ex.len,
     };
+    if (n_args > 5 && mp_obj_is_true(args[5])) {
+        if (!p4bridge_init()) {
+            mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("p4bridge"));
+        }
+        cfg.tspico = tspico_frame;
+    }
     bool sound = n_args <= 4 || mp_obj_is_true(args[4]);
     if (sound && (err = p4_audio_init(SAMPLE_RATE)) != ESP_OK) {
         mp_raise_msg_varg(&mp_type_OSError, MP_ERROR_TEXT("audio: %s"),
@@ -315,7 +350,7 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(run_obj, 2, 5, run);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(run_obj, 2, 6, run);
 
 static mp_obj_t volume(mp_obj_t percent) {
     p4_audio_volume(mp_obj_get_int(percent));
@@ -382,6 +417,23 @@ static mp_obj_t load_snapshot(mp_obj_t data) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(load_snapshot_obj, load_snapshot);
+
+// keys(rows): keys held as if touched, for scripts and tests: 8 bytes, a
+// half-row each as the machine reads it (0 bits down); keys() lets go
+static mp_obj_t keys(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        memset(injected, 0xff, sizeof(injected));
+    } else {
+        mp_buffer_info_t b;
+        mp_get_buffer_raise(args[0], &b, MP_BUFFER_READ);
+        if (b.len != 8) {
+            mp_raise_ValueError(MP_ERROR_TEXT("8 half-rows"));
+        }
+        memcpy(injected, b.buf, 8);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(keys_obj, 0, 1, keys);
 
 // osd(row, text, style=0): a row of the side panel's menu area; style 0
 // plain, 1 inverse, 2 a button (platform/p4_osd.h)
@@ -494,6 +546,9 @@ static mp_obj_t run_status(void) {
     store(d, MP_QSTR_touch_max, mp_obj_new_int_from_uint(t.read_us_max));
     store(d, MP_QSTR_touch_reports, mp_obj_new_int_from_uint(t.reports));
     store(d, MP_QSTR_touch_errors, mp_obj_new_int_from_uint(t.errors));
+    store(d, MP_QSTR_pico_waits, mp_obj_new_int_from_uint(r.pico_waits));
+    store(d, MP_QSTR_pico_wait_us, mp_obj_new_int_from_ull(r.pico_wait_us));
+    store(d, MP_QSTR_pico_wait_max, mp_obj_new_int_from_uint(r.pico_wait_max));
     if (r.sound) {
         p4_audio_stats_t a;
         p4_audio_get_stats(&a);
@@ -515,6 +570,7 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_volume), MP_ROM_PTR(&volume_obj) },
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
+    { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&keys_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd), MP_ROM_PTR(&osd_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd_tap), MP_ROM_PTR(&osd_tap_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },

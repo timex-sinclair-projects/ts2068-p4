@@ -13,14 +13,16 @@
 #
 # On the card:
 #
-#   /TS2068/settings.json   rom, exrom, volume, sound
+#   /TS2068/settings.json   rom, exrom, volume, sound, tspico
 #   /TS2068/ROMS/           ROM files
 #   /TS2068/SNAPS/          SZX snapshots (ts2068.snapshot); Fuse's load
 #                           too, if they need no DOCK cartridge
 #
 # rom names a file in ROMS/: a 16K HOME ROM, with exrom naming its 8K or
 # 16K EXROM, or a 32K file holding both, HOME first (as TSPICO-23.ROM
-# does), when exrom is ignored. The card is the TS-Pico's too: it's
+# does), when exrom is ignored. A 32K ROM plugs in the TS-Pico too, unless
+# tspico is false: the firmware (p4host.py, /TS) starts the first time,
+# and ports 0Eh/0Fh go to it. The card is the TS-Pico's too: it's
 # mounted only while the files are read, so the TS-Pico firmware can mount
 # it itself. tools/p4/install.py puts this file on the flash, and
 # tools/p4/sd_roms.py puts ROMs on the card.
@@ -28,39 +30,51 @@
 import json
 import machine
 import os
+import sys
+import time
 
 import ts2068
 
 SD = "/sd"
 DIR = SD + "/TS2068"
 SNAPS = DIR + "/SNAPS"
-DEFAULTS = {"rom": "tc2068-0.rom", "exrom": "tc2068-1.rom", "volume": 10, "sound": True}
+DEFAULTS = {"rom": "tc2068-0.rom", "exrom": "tc2068-1.rom", "volume": 10, "sound": True,
+            "tspico": True}
+READY_MS = 15000                        # the firmware's boot, to READY
 
 
 class _Card:
     """Mounted at /sd for the with block, unless it already was."""
 
     def __enter__(self):
-        self.card = None
+        self.card = self.mounted = None
         try:
             os.stat(SD)
             return self
         except OSError:
             pass
-        with open("/p4/sd.json") as f:
-            a = json.load(f)
-        a["data"] = tuple(a["data"])
-        self.card = machine.SDCard(**a)
+        # The TS-Pico firmware's card, once it has one: the slot takes one
+        # SDCard at a time (p4host keeps its own for good)
+        host = sys.modules.get("p4host")
+        if host and host._card:
+            self.mounted = host._card
+        else:
+            with open("/p4/sd.json") as f:
+                a = json.load(f)
+            a["data"] = tuple(a["data"])
+            self.card = self.mounted = machine.SDCard(**a)
         try:
-            os.mount(self.card, SD)
+            os.mount(self.mounted, SD)
         except OSError:
-            self.card.deinit()
+            if self.card:
+                self.card.deinit()
             raise
         return self
 
     def __exit__(self, *exc):
-        if self.card:
+        if self.mounted:
             os.umount(SD)
+        if self.card:
             self.card.deinit()
 
 
@@ -155,7 +169,26 @@ def start(**overrides):
             ex = _load(s["exrom"])
     if len(home) != 0x4000:
         raise ValueError("%s: not 16K or 32K" % s["rom"])
+    # A 32K ROM is the TS-Pico's: plug the TS-Pico in, the firmware first
+    pico = s["tspico"] and len(ex) == 0x4000 and _tspico()
     ts2068.stop()
     ts2068.volume(s["volume"])
-    ts2068.run(home, ex, False, False, s["sound"])
+    ts2068.run(home, ex, False, False, s["sound"], pico)
     return s
+
+
+def _tspico():
+    """Start the TS-Pico firmware (tspico/py/p4host.py) if it isn't running,
+    and wait for it to be READY. Once started it runs until a hard reset,
+    across machine resets, as the Pico does on a TS2068 reset."""
+    import p4host
+    if getattr(p4host, "_started", False):
+        return True                     # READY was seen; the Z80 may have taken it
+    p4host.start()
+    p4host._started = True
+    t = time.ticks_ms()
+    while not p4host.ready():
+        if time.ticks_diff(time.ticks_ms(), t) > READY_MS:
+            raise OSError("TS-Pico firmware not READY")
+        time.sleep_ms(50)
+    return True

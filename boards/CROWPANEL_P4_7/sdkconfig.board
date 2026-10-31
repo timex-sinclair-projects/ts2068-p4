@@ -1,0 +1,11 @@
+# The DSI driver restarts the panel's DMA from an interrupt at the end of
+# every refresh. By default that interrupt waits while a flash write has
+# the caches off, and the whole panel blanks until it can run: it blinked
+# whenever the TS-Pico firmware wrote to the flash filesystem.
+CONFIG_LCD_DSI_ISR_CACHE_SAFE=y
+
+# The code and read-only data run from PSRAM, copied there at boot, so a
+# flash write needn't turn the caches off. With them off, core 0 couldn't
+# fetch the emulator's code: a frame stalled for up to 52 ms and the audio
+# ran dry whenever anything wrote to the flash filesystem.
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y

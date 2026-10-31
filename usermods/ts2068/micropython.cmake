@@ -57,6 +57,7 @@ target_include_directories(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}/machine
     ${TS2068_ROOT}/test/machine
     ${TS2068_ROOT}/platform
+    ${TS2068_ROOT}/tspico/p4bridge
     ${TS2068_ROOT}              # z80_ops.c includes "z80/opcodes_base.c"
 )
 
