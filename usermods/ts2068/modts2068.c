@@ -12,6 +12,8 @@
 //   ts2068.stop()
 //   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
 //   ts2068.load_snapshot(data)       # after run(), running or stopped
+//   ts2068.osd(row, text, style=0)   # the side panel's menu rows (osd.py)
+//   ts2068.osd_tap()                 # -> (row, column) of a tap, or None
 //   ts2068.display_check()           # -> pixels differing from the machine
 //
 // The benchmark boots the ROM, types the fixed BASIC loop
@@ -38,6 +40,7 @@
 #include "p4_audio.h"
 #include "p4_display.h"
 #include "p4_keyboard.h"
+#include "p4_osd.h"
 #include "p4_touch.h"
 #include "z80_core.h"
 
@@ -169,6 +172,13 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bench_obj, 2, 4, bench);
 // frame, unless demo=True, which does its own typing.
 
 
+// The side panel: the menu rows above, the keyboard below
+static int side_draw(uint16_t *fb, int buffer, int shown) {
+    int keys = p4_keyboard_draw(fb, buffer, shown);
+    int menu = p4_osd_draw(fb, buffer, shown);
+    return keys | menu;
+}
+
 static void tick_cb(void *arg) {
     (void)arg;
     xTaskNotifyGive(run_handle);
@@ -206,6 +216,7 @@ static void run_task(void *arg) {
             uint8_t rows[8];
             int n = p4_touch_read(points, P4_TOUCH_MAX);
             p4_keyboard_touch(points, n, rows);
+            p4_osd_touch(points, n);
             ts2068_set_keyboard(rows);
             r.touch_us += esp_timer_get_time() - t;
         }
@@ -280,7 +291,8 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     }
     machine_ready = true;
     p4_keyboard_init((const uint8_t *)home.buf + ROM_FONT);
-    p4_display_set_side(p4_keyboard_draw);
+    p4_osd_init((const uint8_t *)home.buf + ROM_FONT);
+    p4_display_set_side(side_draw);
     if (sound && ts2068_sound_init(SAMPLE_RATE)) {
         mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("sound"));
     }
@@ -370,6 +382,27 @@ static mp_obj_t load_snapshot(mp_obj_t data) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(load_snapshot_obj, load_snapshot);
+
+// osd(row, text, style=0): a row of the side panel's menu area; style 0
+// plain, 1 inverse, 2 a button (platform/p4_osd.h)
+static mp_obj_t osd(size_t n_args, const mp_obj_t *args) {
+    p4_osd_text(mp_obj_get_int(args[0]), mp_obj_str_get_str(args[1]),
+        n_args > 2 ? mp_obj_get_int(args[2]) : P4_OSD_PLAIN);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(osd_obj, 2, 3, osd);
+
+// osd_tap() -> (row, column) of the last tap in the menu area not yet
+// taken, or None
+static mp_obj_t osd_tap(void) {
+    int row, col;
+    if (!p4_osd_tap(&row, &col)) {
+        return mp_const_none;
+    }
+    mp_obj_t t[2] = { MP_OBJ_NEW_SMALL_INT(row), MP_OBJ_NEW_SMALL_INT(col) };
+    return mp_obj_new_tuple(2, t);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(osd_tap_obj, osd_tap);
 
 // display_check() -> pixels on the panel that differ from the machine's
 // screen; call after stop()
@@ -482,6 +515,8 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_volume), MP_ROM_PTR(&volume_obj) },
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
+    { MP_ROM_QSTR(MP_QSTR_osd), MP_ROM_PTR(&osd_obj) },
+    { MP_ROM_QSTR(MP_QSTR_osd_tap), MP_ROM_PTR(&osd_tap_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },
     { MP_ROM_QSTR(MP_QSTR_display_check), MP_ROM_PTR(&display_check_obj) },
 };

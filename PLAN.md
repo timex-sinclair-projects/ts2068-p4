@@ -236,7 +236,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 - [x] **Input, stage 1:** an on-screen TS2068 keyboard with multi-touch, so CAPS SHIFT and SYMBOL SHIFT combinations work. *2026-10-31: `platform/p4_touch.c` (the GT911) and `platform/p4_keyboard.c`, in the side panel; checked on the panel (docs/NOTES.md, Phase 3).*
 - [ ] **Input, stage 2:** a physical keyboard, decided by Q3/Q4. Options: USB host, BLE via the C6, or a real matrix keyboard on an I2C GPIO expander.
 - [x] **ROMs:** split `TSPICO-21.ROM` into 16K HOME and 16K EXROM. *2026-10-31: `emu.py` splits a 32K ROM file as it loads it, HOME first; the pinned firmware has `TSPICO-23.ROM`.*
-- [ ] **OSD:** a side-panel menu and file browser, following ESPectrum's OSD as the model.
+- [x] **OSD:** a side-panel menu and file browser, following ESPectrum's OSD as the model. *2026-10-31: `platform/p4_osd.c` draws text rows and reports taps above the keyboard; `usermods/ts2068/osd.py` has the menu: ROMs and snapshots from the card, save snapshot, reset, volume (docs/NOTES.md, Phase 3).*
 
 **Gate 3:** the TS2068 boots to BASIC with display, sound and keyboard, and a test program runs at full speed.
 

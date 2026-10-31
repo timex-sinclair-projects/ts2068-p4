@@ -2,7 +2,7 @@
 # TS2068 folder (PLAN.md Phase 3, "Storage").
 #
 #   import emu
-#   emu.start()                      # as settings.json says
+#   emu.start()                      # as settings.json says; a reset if running
 #   emu.start(rom="TSPICO-23.ROM")   # this once, without saving it
 #   emu.save(volume=20)              # change settings.json
 #   emu.settings()                   # -> dict
@@ -143,7 +143,8 @@ def _load(name):
 
 
 def start(**overrides):
-    """Read the settings and ROMs, then run the machine (ts2068.run)."""
+    """Read the settings and ROMs, then run the machine (ts2068.run),
+    stopping it first if it's running: a reset."""
     with _Card():
         s = _read_settings()
         s.update(overrides)
@@ -154,6 +155,7 @@ def start(**overrides):
             ex = _load(s["exrom"])
     if len(home) != 0x4000:
         raise ValueError("%s: not 16K or 32K" % s["rom"])
+    ts2068.stop()
     ts2068.volume(s["volume"])
     ts2068.run(home, ex, False, False, s["sound"])
     return s

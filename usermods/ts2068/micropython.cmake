@@ -1,7 +1,8 @@
 # ts2068: the emulated TS2068 (machine/ on a Z80 core) as a MicroPython
 # user C module: the Phase 2 benchmark, and the machine in real time on the
 # panel (platform/p4_display.c) with sound (machine/sound/, platform/p4_audio.c)
-# and the on-screen keyboard (platform/p4_touch.c, p4_keyboard.c).
+# and the on-screen keyboard and menu (platform/p4_touch.c, p4_keyboard.c,
+# p4_osd.c).
 #
 # The Z80 core is Fuse's (z80/) unless the environment says
 # TS2068_CORE=jls at configure time, which builds Z80_JLS (z80_jls/)
@@ -46,6 +47,7 @@ target_sources(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}/platform/p4_audio.c
     ${TS2068_ROOT}/platform/p4_touch.c
     ${TS2068_ROOT}/platform/p4_keyboard.c
+    ${TS2068_ROOT}/platform/p4_osd.c
 )
 
 target_include_directories(usermod_ts2068 INTERFACE
