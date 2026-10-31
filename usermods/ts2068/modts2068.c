@@ -15,6 +15,8 @@
 //   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
 //   ts2068.load_snapshot(data)       # after run(), running or stopped
 //   ts2068.keys(rows)                # hold keys (8 half-rows); keys() releases
+//   ts2068.peek(addr, n), ts2068.poke(addr, data)   # HOME RAM, for scripts
+//   ts2068.screen_text()             # -> the screen as 24 lines of text
 //   ts2068.pico_trace(n)             # keep the next n TS-Pico bus frames;
 //   ts2068.pico_trace()              # -> them, 3 bytes each
 //   ts2068.osd(row, text, style=0)   # the side panel's menu rows (osd.py)
@@ -83,6 +85,7 @@ static struct {
     uint32_t pico_waits, pico_wait_max; // IN (0Eh) over 1 ms, and the longest
     uint64_t pico_wait_us;
 } r;
+static uint8_t font[96 * 8];             // the ROM's, for screen_text()
 static uint8_t injected[8] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 static bool machine_ready;              // run() has initialised the machine
 
@@ -367,6 +370,7 @@ static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
         mp_raise_ValueError(MP_ERROR_TEXT("EXROM: not 8K or 16K"));
     }
     machine_ready = true;
+    memcpy(font, (const uint8_t *)home.buf + ROM_FONT, sizeof(font));
     p4_keyboard_init((const uint8_t *)home.buf + ROM_FONT);
     p4_osd_init((const uint8_t *)home.buf + ROM_FONT);
     p4_display_set_side(side_draw);
@@ -459,6 +463,69 @@ static mp_obj_t load_snapshot(mp_obj_t data) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(load_snapshot_obj, load_snapshot);
+
+// For scripts and tests (tools/p4/session.py): HOME RAM read and written
+// from core 1 while the machine runs, as a debugger would, and the screen
+// read back as text in the ROM's character set (font, copied by run())
+
+static uint8_t *ram_at(mp_int_t addr, size_t n) {
+    if (!machine_ready || addr < 0x4000 || addr + n > 0x10000) {
+        mp_raise_ValueError(MP_ERROR_TEXT("HOME RAM is 4000h-FFFFh"));
+    }
+    return ts2068_home_ram() + addr - 0x4000;
+}
+
+// peek(addr, n=1) -> bytes
+static mp_obj_t peek(size_t n_args, const mp_obj_t *args) {
+    size_t n = n_args > 1 ? mp_obj_get_int(args[1]) : 1;
+    return mp_obj_new_bytes(ram_at(mp_obj_get_int(args[0]), n), n);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(peek_obj, 1, 2, peek);
+
+// poke(addr, data)
+static mp_obj_t poke(mp_obj_t addr, mp_obj_t data) {
+    mp_buffer_info_t b;
+    mp_get_buffer_raise(data, &b, MP_BUFFER_READ);
+    memcpy(ram_at(mp_obj_get_int(addr), b.len), b.buf, b.len);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(poke_obj, poke);
+
+// screen_text() -> the 24 lines of the display file (the first screen) as
+// text: each cell matched against the ROM font, plain or inverse; '?' for
+// a cell that isn't a character
+static mp_obj_t screen_text(void) {
+    if (!machine_ready) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("not started"));
+    }
+    const uint8_t *scr = ts2068_home_ram();
+    vstr_t v;
+    vstr_init(&v, 24 * 33);
+    for (int row = 0; row < 24; row++) {
+        for (int col = 0; col < 32; col++) {
+            uint8_t cell[8];
+            for (int p = 0; p < 8; p++) {
+                cell[p] = scr[((row & 0x18) << 8) | (p << 8) | ((row & 7) << 5) | col];
+            }
+            char ch = '?';
+            for (int c = 0; c < 96 && ch == '?'; c++) {
+                const uint8_t *g = font + 8 * c;
+                bool plain = true, inverse = true;
+                for (int p = 0; p < 8; p++) {
+                    plain &= cell[p] == g[p];
+                    inverse &= cell[p] == (uint8_t)~g[p];
+                }
+                if (plain || inverse) {
+                    ch = 0x20 + c;
+                }
+            }
+            vstr_add_byte(&v, ch);
+        }
+        vstr_add_byte(&v, '\n');
+    }
+    return mp_obj_new_str_from_vstr(&v);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(screen_text_obj, screen_text);
 
 // keys(rows): keys held as if touched, for scripts and tests: 8 bytes, a
 // half-row each as the machine reads it (0 bits down); keys() lets go
@@ -613,6 +680,9 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&keys_obj) },
+    { MP_ROM_QSTR(MP_QSTR_peek), MP_ROM_PTR(&peek_obj) },
+    { MP_ROM_QSTR(MP_QSTR_poke), MP_ROM_PTR(&poke_obj) },
+    { MP_ROM_QSTR(MP_QSTR_screen_text), MP_ROM_PTR(&screen_text_obj) },
     { MP_ROM_QSTR(MP_QSTR_pico_trace), MP_ROM_PTR(&pico_trace_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd), MP_ROM_PTR(&osd_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd_tap), MP_ROM_PTR(&osd_tap_obj) },

@@ -14,7 +14,8 @@ Two differences are expected between any two runs, and --timing allows
 for them:
   - the session id, bytes 3-4 of a 10-byte LOAD/SAVE pre-header (flag 00
     or FF), which the ROM takes from FRAMES (firmware docs/reference,
-    glossary, "Session id"), and so the pre-header's XOR, byte 9;
+    glossary, "Session id"), and so the pre-header's XOR, byte 9, and
+    the copy a SAVE's blocks echo after their flag;
   - which BUSY/READY changes of the status byte the Z80 happened to see:
     with --timing, status reads are left out altogether.
 """
@@ -52,17 +53,31 @@ def read_trace(path):
 
 def mask_sessions(frames):
     """Zero the session id and XOR of each pre-header: ten OUT (0Eh) in a
-    row, flag 00 or FF, whose XOR checks"""
+    row, flag 00 or FF, whose XOR checks. And the session id a SAVE's
+    blocks echo after their flag ("OUT 00, SESSION lo/hi, 17 header
+    bytes, CRC", firmware docs/PROTOCOL.md; the CRC leaves it out)."""
     out = list(frames)
-    for i in range(len(out) - 9):
+    session = None
+    i = 0
+    while i < len(out):
         run = out[i:i + 10]
-        if all(f[0] == 0 for f in run) and run[0][1] in (0x00, 0xFF):
+        if len(run) == 10 and all(f[0] == 0 for f in run) and run[0][1] in (0x00, 0xFF):
             x = 0
             for f in run[:9]:
                 x ^= f[1]
             if x == run[9][1]:
+                session = (run[3][1], run[4][1])
                 for j in (3, 4, 9):
                     out[i + j] = (0, 0, 0)
+                i += 10
+                continue
+        if (session and session != (0, 0) and i + 2 < len(out) and out[i][0] == 0
+                and out[i][1] in (0x00, 0xFF) and out[i + 1] == (0, session[0], 0)
+                and out[i + 2] == (0, session[1], 0)):
+            out[i + 1] = out[i + 2] = (0, 0, 0)
+            i += 3
+            continue
+        i += 1
     return out
 
 
