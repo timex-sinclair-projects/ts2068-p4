@@ -64,8 +64,9 @@ void ts2068_set_joystick( int which, uint8_t bits );
 /* The screen at the end of the last frame, 640 x 240, one byte per pixel:
    the colour 0-15 (8-15 bright). The 512-wide picture with a 64-pixel
    border left and right, 24 lines top and bottom; low-resolution modes
-   are doubled across. Drawn from the screen RAM once a frame, not with
-   the beam: mid-frame changes are not shown yet. */
+   are doubled across. Drawn as the beam passed, in 8-pixel chunks, as
+   Fuse draws it: a change to the display files, the border or port FF's
+   modes shows from where the beam was when it was made. */
 #define TS2068_SCREEN_WIDTH  640
 #define TS2068_SCREEN_HEIGHT 240
 void ts2068_render( uint8_t *pixels );

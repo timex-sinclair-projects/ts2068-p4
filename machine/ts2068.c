@@ -118,6 +118,21 @@ static int flash_frame_count, flash_reversed;
 
 #define ALTDFILE_OFFSET 0x2000
 
+/* The picture as the beam drew it: each 8-pixel chunk of the shown
+   picture, 40 across and 240 down, copied once the beam has passed it */
+#define BEAM_COLS   ( TS2068_SCREEN_WIDTH / 16 )
+#define BEAM_CHUNKS ( BEAM_COLS * TS2068_SCREEN_HEIGHT )
+#define CHUNK_HIRES 0x80        /* in paper */
+
+typedef struct {
+  libspectrum_byte data, data2, ink, paper;
+} beam_chunk;
+
+static beam_chunk beam[ BEAM_CHUNKS ];
+static int beam_done;           /* chunks copied this frame */
+
+static void beam_update( void );
+
 /* ---- memory ------------------------------------------------------------ */
 
 /* Fuse's tc2068_memory_map: HOME everywhere, then the chunks whose HSR
@@ -178,7 +193,15 @@ writebyte( libspectrum_word address, libspectrum_byte b )
     tstates += ts2068_contention[ tstates ];
   tstates += 3;
 
-  if( chunk ) chunk[ address & 0x1fff ] = b;
+  if( chunk ) {
+    /* The display files, HOME RAM 0x4000-0x5AFF and 0x6000-0x7AFF:
+       what the beam has passed is drawn first (Fuse's
+       memory_display_dirty_sinclair) */
+    if( ( address & 0xc000 ) == 0x4000 && ( address & 0x1fff ) < 0x1b00 &&
+        chunk[ address & 0x1fff ] != b )
+      beam_update();
+    chunk[ address & 0x1fff ] = b;
+  }
 }
 
 /* ---- contention -------------------------------------------------------- */
@@ -333,6 +356,7 @@ port_write( libspectrum_word port, libspectrum_byte b )
   switch( port & 0xff ) {
 
   case 0xfe:
+    beam_update();
     ula_last_byte = b;
     /* Fuse's ula_write: MIC (bit 3) is active low, EAR (bit 4) high */
     sound_ula( tstates, !( b & 0x08 ), !!( b & 0x10 ) );
@@ -345,6 +369,7 @@ port_write( libspectrum_word port, libspectrum_byte b )
     break;
 
   case 0xff:
+    beam_update();
     scld_dec_write( b );
     break;
 
@@ -392,6 +417,10 @@ static void
 frame_event_fn( libspectrum_dword event_tstates, int type, void *user_data )
 {
   (void)event_tstates; (void)type; (void)user_data;
+
+  /* Fuse's display_frame: the rest of the picture, then a new one */
+  beam_update();
+  beam_done = 0;
 
   event_frame( TS2068_TSTATES_PER_FRAME );
   tstates -= TS2068_TSTATES_PER_FRAME;
@@ -490,6 +519,7 @@ ts2068_reset( int hard_reset )
   z80_reset( hard_reset );
 
   frame_count = 0;
+  beam_done = 0;
 }
 
 /* ---- for the platform -------------------------------------------------- */
@@ -543,8 +573,14 @@ ts2068_set_joystick( int which, libspectrum_byte bits )
 
 /* ---- the screen -------------------------------------------------------- */
 
-/* Fuse's display_write_if_dirty_timex and display_get_attr_byte, drawn
-   for the whole screen at once from the RAM and port FF as they are now. */
+/* Fuse follows the beam in 8-pixel chunks (docs/NOTES.md, Q7): before a
+   write to the display files, port FE or port FF lands, every chunk the
+   beam has passed is copied, as display_write_if_dirty_timex,
+   display_get_attr_byte and the border would draw it from the RAM and
+   ports as they are then (display_dirty.c's copy_critical_region,
+   display_border.c's border changes); the rest at the end of the frame. A
+   chunk is copied once the beam is past its last pixel: the one at line
+   y, column x starts at LINE_TIMES_0 + 224 y + 4 x. */
 
 static void
 parse_attr( libspectrum_byte attr, libspectrum_byte *ink,
@@ -582,14 +618,16 @@ attr_start( int y )
   return 0x1800 + 32 * ( y / 8 );
 }
 
-void
-ts2068_render_line( int line, libspectrum_byte *row )
+/* Copy chunks beam_done to end - 1, all on one line */
+static void
+beam_copy_line( int end )
 {
   const libspectrum_byte *screen = ram;         /* RAM5 */
-  int hires = !!( scld_dec & SCLD_HIRES );
+  int line = beam_done / BEAM_COLS, col = beam_done % BEAM_COLS;
   int y = line - BORDER_LINES;
+  int hires = !!( scld_dec & SCLD_HIRES );
+  int alt = scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0;
   libspectrum_byte border, ink = 0, paper = 0;
-  int x, i;
 
   if( hires ) {
     parse_attr( hires_attr(), &ink, &paper );
@@ -597,41 +635,83 @@ ts2068_render_line( int line, libspectrum_byte *row )
   } else {
     border = ula_last_byte & 0x07;
   }
-  if( y < 0 || y >= SCREEN_LINES ) {
-    memset( row, border, TS2068_SCREEN_WIDTH );
-    return;
-  }
-  memset( row, border, BORDER_COLS * 16 );
-  memset( row + TS2068_SCREEN_WIDTH - BORDER_COLS * 16, border,
-          BORDER_COLS * 16 );
-  row += BORDER_COLS * 16;
 
-  for( x = 0; x < 32; x++ ) {
-    int offset = line_start( y ) + x +
-                 ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 );
-    libspectrum_byte data = screen[ offset ], data2, attr;
-    libspectrum_byte *p = row + x * 16;
+  for( ; beam_done < end; beam_done++, col++ ) {
+    beam_chunk *c = &beam[ beam_done ];
+    int x = col - BORDER_COLS, offset;
 
+    if( y < 0 || y >= SCREEN_LINES || x < 0 || x >= 32 ) {
+      c->data = c->data2 = 0;
+      c->ink = c->paper = border;
+      continue;
+    }
+
+    offset = line_start( y ) + x + alt;
+    c->data = screen[ offset ];
     if( hires ) {
       switch( scld_dec & 0x07 ) {
-      case 0x05: data2 = screen[ attr_start( y ) + x + ALTDFILE_OFFSET ]; break;
-      case 0x06: data2 = screen[ offset + ALTDFILE_OFFSET ]; break;
-      case 0x07: data2 = data; break;
-      default:   data2 = screen[ attr_start( y ) + x ]; break;
+      case 0x05: offset = attr_start( y ) + x + ALTDFILE_OFFSET; break;
+      case 0x06: offset = line_start( y ) + x + ALTDFILE_OFFSET; break;
+      case 0x07: break;
+      default:   offset = attr_start( y ) + x; break;
       }
-      for( i = 0; i < 8; i++ ) {
-        p[ i ] = data & ( 0x80 >> i ) ? ink : paper;
-        p[ 8 + i ] = data2 & ( 0x80 >> i ) ? ink : paper;
-      }
+      c->data2 = screen[ offset ];
+      c->ink = ink;
+      c->paper = paper | CHUNK_HIRES;
     } else {
+      libspectrum_byte attr;
+
       if( scld_dec & SCLD_EXTCOLOUR )
         attr = screen[ line_start( y ) + x + ALTDFILE_OFFSET ];
       else
-        attr = screen[ attr_start( y ) + x +
-                       ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 ) ];
-      parse_attr( attr, &ink, &paper );
+        attr = screen[ attr_start( y ) + x + alt ];
+      parse_attr( attr, &c->ink, &c->paper );
+      c->data2 = 0;
+    }
+  }
+}
+
+/* Copy the chunks the beam has passed (Fuse's display_get_beam_position:
+   it stops at the end of the shown picture) */
+static void
+beam_update( void )
+{
+  libspectrum_signed_dword t =
+    (libspectrum_signed_dword)tstates - LINE_TIMES_0;
+  int line, col, end;
+
+  if( t < 0 ) return;
+  line = t / TS2068_TSTATES_PER_LINE;
+  if( line >= TS2068_SCREEN_HEIGHT ) {
+    end = BEAM_CHUNKS;
+  } else {
+    col = ( t % TS2068_TSTATES_PER_LINE ) / 4;
+    end = line * BEAM_COLS + ( col < BEAM_COLS ? col : BEAM_COLS );
+  }
+
+  while( beam_done < end ) {
+    int line_end = ( beam_done / BEAM_COLS + 1 ) * BEAM_COLS;
+    beam_copy_line( end < line_end ? end : line_end );
+  }
+}
+
+void
+ts2068_render_line( int line, libspectrum_byte *row )
+{
+  int col, i;
+
+  for( col = 0; col < BEAM_COLS; col++, row += 16 ) {
+    const beam_chunk *c = &beam[ line * BEAM_COLS + col ];
+    libspectrum_byte ink = c->ink, paper = c->paper & 0x0f;
+
+    if( c->paper & CHUNK_HIRES ) {
+      for( i = 0; i < 8; i++ ) {
+        row[ i ] = c->data & ( 0x80 >> i ) ? ink : paper;
+        row[ 8 + i ] = c->data2 & ( 0x80 >> i ) ? ink : paper;
+      }
+    } else {
       for( i = 0; i < 8; i++ )
-        p[ 2 * i ] = p[ 2 * i + 1 ] = data & ( 0x80 >> i ) ? ink : paper;
+        row[ 2 * i ] = row[ 2 * i + 1 ] = c->data & ( 0x80 >> i ) ? ink : paper;
     }
   }
 }

@@ -4,11 +4,12 @@ compare the CPU state and the screen after each of several frame counts
 (PLAN.md Phase 2, "Host check").
 
     python3 tools/host/compare_fuse.py [--fuse PATH] [--frames 1,50,300]
-                                       [--rom stock|tspico|timing|all] [--ts2068]
+                                       [--rom stock|tspico|timing|beam|all] [--ts2068]
 
 ROMs: the stock TS2068 ROM, the TS-Pico ROM (firmware/src/rom/TSPICO-23.ROM,
-split), and the DOCK/EXROM contention test (test/basic/dockhome.asm, whose
-counts are printed after the last frame count).
+split), the DOCK/EXROM contention test (test/basic/dockhome.asm, whose
+counts are printed after the last frame count), and the picture changed
+while the beam draws it (test/basic/beam.asm).
 
 Fuse is the reference build in ~/esp/ref/fuse-tspico (docs/NOTES.md,
 "Reference build"), run headless through its automation options with no
@@ -61,6 +62,12 @@ def roms(which, tmp):
         if not os.path.exists(home):
             sys.exit("build the timing ROM first: make -C test/machine")
         out.append(("timing", home, ex))
+    if which in ("beam", "all"):
+        d = os.path.join(ROOT, "test", "basic")
+        home, ex = os.path.join(d, "beam-home.rom"), os.path.join(d, "beam-exrom.rom")
+        if not os.path.exists(home):
+            sys.exit("build the beam ROM first: make -C test/machine beam-rom")
+        out.append(("beam", home, ex))
     return out
 
 
@@ -137,7 +144,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fuse", default=os.path.expanduser("~/esp/ref/fuse-tspico/fuse"))
     ap.add_argument("--frames", default="1,2,10,50,100,300,1000,3000")
-    ap.add_argument("--rom", default="all", choices=("stock", "tspico", "timing", "all"))
+    ap.add_argument("--rom", default="all", choices=("stock", "tspico", "timing", "beam", "all"))
     ap.add_argument("--core", default="fuse", choices=("fuse", "jls"),
                     help="which Z80 core our run_ts2068 was built with")
     ap.add_argument("--ts2068", action="store_true",

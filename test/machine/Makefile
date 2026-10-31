@@ -27,6 +27,11 @@ $(TIMING)/dockhome-home.rom $(TIMING)/dockhome-exrom.rom: $(TIMING)/dockhome.asm
 
 timing-rom: $(TIMING)/dockhome-home.rom
 
+$(TIMING)/beam-home.rom $(TIMING)/beam-exrom.rom: $(TIMING)/beam.asm
+	cd $(TIMING) && sjasmplus --nologo beam.asm
+
+beam-rom: $(TIMING)/beam-home.rom
+
 $(TIMING)/sound-home.rom $(TIMING)/sound-exrom.rom: $(TIMING)/sound.asm
 	cd $(TIMING) && sjasmplus --nologo sound.asm
 
@@ -47,11 +52,11 @@ sound: run_ts2068 run_ts2068-float $(TIMING)/sound-home.rom
 	python3 $(ROOT)/tools/host/compare_sound.py
 	python3 $(ROOT)/tools/host/compare_sound.py --run run_ts2068-float --tolerance 1
 
-compare: run_ts2068$(SUFFIX) timing-rom
+compare: run_ts2068$(SUFFIX) timing-rom beam-rom
 	python3 $(ROOT)/tools/host/compare_fuse.py --core $(CORE)
 	python3 $(ROOT)/tools/host/compare_fuse.py --core $(CORE) --rom timing --frames 30 --ts2068
 
 clean:
 	rm -rf run_ts2068 run_ts2068-jls run_ts2068-float szx_resave jls-*.o out
 
-.PHONY: compare timing-rom sound szx clean
+.PHONY: compare timing-rom beam-rom sound szx clean

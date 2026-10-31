@@ -108,7 +108,7 @@ The numbers are in NOTES.md, "Phase 3 progress". This answers Q9: the worst fram
 - **The `esp_lcd_ek79007` managed component:** seven register writes don't justify a component-manager dependency in MicroPython's build.
 - **Drawing through `esp_lcd_panel_draw_bitmap` copies:** they always go into the buffer currently on screen.
 
-**Still open:** following the beam (Q7). The picture is drawn once a frame from screen RAM.
+**Following the beam (Q7), 2026-10-31:** the machine copies the picture in 8-pixel chunks as the beam passes, as Fuse does, and `ts2068_render_line` draws from those copies (docs/NOTES.md, Phase 3).
 
 ## D7. Sound: Fuse's, paced by the I2S clock (2026-10-30)
 
