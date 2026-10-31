@@ -84,3 +84,29 @@ None of these changed a single register, T-state or screen in the TS2068 runs, s
 **Gate 2 (met 2026-10-30):** Fuse's core holds a sustained frame of 2.5 ms against a 16.6 ms budget, which leaves about 85% for display and audio, and passes zexdoc, zexall and Fuse's `coretest`.
 
 **Ruled out:** Z80_JLS, for the reasons above. Making the project GPL-3 bought nothing.
+
+## D6. Display path: triple buffers in PSRAM, copied by the PPA (2026-10-30)
+
+**Decided:** `platform/p4_display.c` drives the EK79007 panel directly through IDF's `esp_lcd` MIPI-DSI driver:
+
+- three 1024×600 RGB565 frame buffers in PSRAM, flipped at refresh;
+- the TS2068's picture at 640×480, every line doubled, with a 384-pixel side panel;
+- only changed lines converted, in internal RAM, then copied into the frame buffer by the PPA, twice (even rows and odd rows);
+- the panel's refresh tuned to 60.10 Hz to match the TS2068.
+
+The numbers are in NOTES.md, "Phase 3 progress". This answers Q9: the worst frame is 9.9 ms of the 16.6 ms budget, with the Z80 included.
+
+**Why:**
+
+- **Triple buffering:** two buffers would mean either waiting for the panel or dropping frames. Since the panel and the TS2068 run at almost the same rate, the drops would come in long runs.
+- **The PPA:** the CPU can only fill PSRAM at about 56 MB/s, which made a full redraw 11 ms.
+- **The even/odd copies:** they double lines without relying on the PPA's scaler, whose method isn't documented.
+
+**Ruled out:**
+
+- **LVGL** (Elecrow's examples use it): a GUI library between the emulator and a frame buffer it fills itself.
+- **The `esp_lcd_ek79007` managed component:** seven register writes don't justify a component-manager dependency in MicroPython's build.
+- **Drawing through `esp_lcd_panel_draw_bitmap` copies:** they always go into the buffer currently on screen.
+
+**Still open:** following the beam (Q7). The picture is drawn once a frame from screen RAM.
+

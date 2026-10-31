@@ -562,12 +562,13 @@ attr_start( int y )
 }
 
 void
-ts2068_render( libspectrum_byte *pixels )
+ts2068_render_line( int line, libspectrum_byte *row )
 {
   const libspectrum_byte *screen = ram;         /* RAM5 */
   int hires = !!( scld_dec & SCLD_HIRES );
-  libspectrum_byte border, ink, paper;
-  int x, y, i;
+  int y = line - BORDER_LINES;
+  libspectrum_byte border, ink = 0, paper = 0;
+  int x, i;
 
   if( hires ) {
     parse_attr( hires_attr(), &ink, &paper );
@@ -575,42 +576,52 @@ ts2068_render( libspectrum_byte *pixels )
   } else {
     border = ula_last_byte & 0x07;
   }
-  memset( pixels, border, TS2068_SCREEN_WIDTH * TS2068_SCREEN_HEIGHT );
+  if( y < 0 || y >= SCREEN_LINES ) {
+    memset( row, border, TS2068_SCREEN_WIDTH );
+    return;
+  }
+  memset( row, border, BORDER_COLS * 16 );
+  memset( row + TS2068_SCREEN_WIDTH - BORDER_COLS * 16, border,
+          BORDER_COLS * 16 );
+  row += BORDER_COLS * 16;
 
-  for( y = 0; y < SCREEN_LINES; y++ ) {
-    libspectrum_byte *row = pixels +
-      ( y + BORDER_LINES ) * TS2068_SCREEN_WIDTH + BORDER_COLS * 16;
+  for( x = 0; x < 32; x++ ) {
+    int offset = line_start( y ) + x +
+                 ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 );
+    libspectrum_byte data = screen[ offset ], data2, attr;
+    libspectrum_byte *p = row + x * 16;
 
-    for( x = 0; x < 32; x++ ) {
-      int offset = line_start( y ) + x +
-                   ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 );
-      libspectrum_byte data = screen[ offset ], data2, attr;
-      libspectrum_byte *p = row + x * 16;
-
-      if( hires ) {
-        switch( scld_dec & 0x07 ) {
-        case 0x05: data2 = screen[ attr_start( y ) + x + ALTDFILE_OFFSET ]; break;
-        case 0x06: data2 = screen[ offset + ALTDFILE_OFFSET ]; break;
-        case 0x07: data2 = data; break;
-        default:   data2 = screen[ attr_start( y ) + x ]; break;
-        }
-        parse_attr( hires_attr(), &ink, &paper );
-        for( i = 0; i < 8; i++ ) {
-          p[ i ] = data & ( 0x80 >> i ) ? ink : paper;
-          p[ 8 + i ] = data2 & ( 0x80 >> i ) ? ink : paper;
-        }
-      } else {
-        if( scld_dec & SCLD_EXTCOLOUR )
-          attr = screen[ line_start( y ) + x + ALTDFILE_OFFSET ];
-        else
-          attr = screen[ attr_start( y ) + x +
-                         ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 ) ];
-        parse_attr( attr, &ink, &paper );
-        for( i = 0; i < 8; i++ )
-          p[ 2 * i ] = p[ 2 * i + 1 ] = data & ( 0x80 >> i ) ? ink : paper;
+    if( hires ) {
+      switch( scld_dec & 0x07 ) {
+      case 0x05: data2 = screen[ attr_start( y ) + x + ALTDFILE_OFFSET ]; break;
+      case 0x06: data2 = screen[ offset + ALTDFILE_OFFSET ]; break;
+      case 0x07: data2 = data; break;
+      default:   data2 = screen[ attr_start( y ) + x ]; break;
       }
+      for( i = 0; i < 8; i++ ) {
+        p[ i ] = data & ( 0x80 >> i ) ? ink : paper;
+        p[ 8 + i ] = data2 & ( 0x80 >> i ) ? ink : paper;
+      }
+    } else {
+      if( scld_dec & SCLD_EXTCOLOUR )
+        attr = screen[ line_start( y ) + x + ALTDFILE_OFFSET ];
+      else
+        attr = screen[ attr_start( y ) + x +
+                       ( scld_dec & SCLD_ALTDFILE ? ALTDFILE_OFFSET : 0 ) ];
+      parse_attr( attr, &ink, &paper );
+      for( i = 0; i < 8; i++ )
+        p[ 2 * i ] = p[ 2 * i + 1 ] = data & ( 0x80 >> i ) ? ink : paper;
     }
   }
+}
+
+void
+ts2068_render( libspectrum_byte *pixels )
+{
+  int line;
+
+  for( line = 0; line < TS2068_SCREEN_HEIGHT; line++ )
+    ts2068_render_line( line, pixels + line * TS2068_SCREEN_WIDTH );
 }
 
 /* ---- state ------------------------------------------------------------- */

@@ -22,7 +22,7 @@ The TS2068 behind the machine API (`machine.h`, names prefixed `ts2068_`), lifte
 
 ## Not yet here
 
-- **The display follows the beam in Fuse** (docs/NOTES.md, Q7): `display.c`, `display_dirty.c`, `display_border.c`. `ts2068_render` draws the whole screen once a frame, so mid-frame mode, colour and border changes don't show yet. Phase 3 decides how the P4 draws.
+- **The display follows the beam in Fuse** (docs/NOTES.md, Q7): `display.c`, `display_dirty.c`, `display_border.c`. `ts2068_render` (or `ts2068_render_line`, one line at a time, which the P4 display uses) draws from screen RAM once a frame, so mid-frame mode, colour and border changes don't show yet. Fuse's dirty-line tracking would also save the P4 display about 2.4 ms a frame of rendering and hashing unchanged lines (docs/NOTES.md, "Phase 3 progress").
 - **Sound:** the beeper (port FE bit 4), and the AY's tone generation (`sound/ay_engine.c`, `blipbuffer.c`, `output_mixer.c`). The AY's registers are kept.
 - **DOCK cartridges** (`dck.c`): the DOCK reads FFh.
 - **Snapshots, RZX, the debugger, the tape and SLT traps:** not planned. The TS-Pico is the tape.

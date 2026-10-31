@@ -279,3 +279,37 @@ With coretest, the 2.5 ms P4 frame and the Fuse comparisons, Fuse's core now mee
 | `micropython.bin` | 0x1ccfe0 | 0x1bff70 |
 
 DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS2068 run. **Decided: Fuse's core (D5), and Gate 2 is met.** The board was left with the Fuse image.
+
+## Phase 3 progress (2026-10-30)
+
+**The panel works from our own code (`platform/p4_display.c`).** `ts2068.run(home, exrom, demo=False)` runs the machine in real time on core 0 and draws every frame on the panel. An esp_timer ticks at 60.1145 Hz and wakes the task. `demo=True` types the benchmark's BASIC loop.
+
+- **Bring-up**, from Elecrow's V1.2 Lesson07 (repo cloned to `~/esp/ref/crowpanel-p4`, commit `f0ebc0c`, 5.5 GB, outside this repo):
+  - LDO3 at 2.5 V for the DSI PHY.
+  - DSI with 2 lanes at 900 Mbps.
+  - The EK79007's start-up commands, the same as Espressif's `esp_lcd_ek79007` 1.0.2, sent by our own code with no managed component.
+  - Backlight PWM on GPIO31 at 30 kHz, on LEDC timer 3, channel 7 (MicroPython's `machine.PWM` allocates from 0).
+  - The panel reset is a software reset, as Elecrow does it.
+  - `esp_lcd` and `esp_driver_ppa` are already in MicroPython's build; the usermod links them (`idf::esp_lcd`, `idf::esp_driver_ledc`, `idf::esp_driver_ppa`).
+- **The DPI clock is 240 MHz divided by a whole number** (`mipi_dsi_hal_host_dpi_calculate_divider`). Elecrow asks for 51 MHz, gets 60 MHz, and so runs the panel at 65.8 Hz, which we measured. Espressif's 52 MHz preset also gets 60 MHz. We keep 60 MHz and Elecrow's porches, except a vertical front porch of 73 lines instead of 12: 1414 × 706, **60.10 Hz**, against the TS2068's 60.1145 Hz. The panel takes it. (We measured about 60 refreshes a second.)
+- **Layout:** the 640×240 picture, every line doubled, at (0, 60). The 384-pixel side panel on the right shows the 16 TS2068 colours as bars (0–7, then 8–15, top to bottom), as a check of colour order and byte order. RGB565 is written little-endian, which is what IDF's DPI driver expects. Elecrow's LVGL demo swaps bytes, but it draws only black and white, which look the same either way. **Checked by eye on the panel (2026-10-30):** the TS2068 screen and the colour bars are right, so little-endian RGB565 and the colour order are correct.
+- **Three frame buffers in PSRAM** (IDF's maximum): one being scanned, one flipped and waiting for the next refresh, one to draw into. Drawing never waits for the panel and never tears. A frame drawn over before the panel showed it counts as `replaced`.
+  - On this chip revision (before v3) there's no DSI vsync interrupt. IDF raises `on_refresh_done` from the DMA's end of transfer, exactly when the DMA restarts on the last flipped buffer, so "being scanned" is updated there.
+- **Only changed lines are drawn.** `ts2068_render_line()` renders one line at a time into a 640-byte buffer, and each line is hashed. A line is converted only if the target frame buffer doesn't hold it already. If nothing changed since the frame shown, nothing is drawn.
+- **The CPU never writes the frame buffers.** It converts changed lines to RGB565 in two internal-RAM strips of 16 lines. The PPA copies each strip to the frame buffer twice, treating it as 300 rows of 2048 pixels: once at x = 0 (the even panel rows) and once at x = 1024 (the odd rows). That doubles the lines with no scaling, so it's exact. `ts2068.display_check()` (after `stop()`) compares all 480 rows with the machine's screen: 0 pixels differ, in both runs below.
+
+**Q9 answered: yes.** Per frame, on core 0:
+
+| | Z80 | Render and draw | Worst frame (both) | Late ticks |
+|---|---|---|---|---|
+| First try: CPU converts into PSRAM, every line, two buffers | 3.0 ms | 2.0 + 11.2 ms (35% of frames dropped) | 17.0 ms | 0 |
+| CPU into PSRAM, changed lines only, three buffers, full redraw forced | 3.1 ms | 2.1 + 11.2 ms | 17.6 ms | 7 in 20 s |
+| **PPA strips, full redraw forced** | 2.5 ms | **6.5 ms** | **9.9 ms** | 0 |
+| **PPA strips, normal (BASIC demo)** | 2.5 ms | 2.6 ms (6.4 ms when a frame changes) | 9.6 ms | 0 |
+
+- The CPU writes PSRAM at only about 56 MB/s with the cache (write-allocate reads, plus the panel's 60 MB/s of DMA reads). The cache write-back was only 0.42 ms of the 11.2.
+- Even when nothing changes, rendering and hashing all 240 lines costs about 2.4 ms a frame. Marking lines dirty when the Z80 writes the display file (Fuse's `display_dirty.c`) would remove most of that.
+- The display still draws once a frame from screen RAM, so mid-frame changes to colours, modes or the border don't show (Q7).
+- **Space:** `micropython.bin` is now about 0x1d4200 of 0x1f0000 (94%).
+- **Gotcha:** adding a qstr that frozen modules already use (`core`, `run`) fails with `redeclaration of enumerator 'MP_QSTR_…'` in `frozen_content.c`. That file isn't regenerated when the usermod's qstrs change. Delete `build-…/frozen_content.c` and rebuild.
+

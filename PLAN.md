@@ -157,7 +157,7 @@ Sources: Elecrow wiki, CNX Software (Oct 2025), OpenELAB listing, atomic14 board
 | Q5 | Does the firmware use `machine.SDCard` or its own SD driver (`TS.sdcard`)? | Phase 4 SD mapping | Read `src/TS/sdcard.py` and its callers |
 | Q6 | Which Fuse files and generated files does the TS2068 machine pull in beyond those listed? | Phase 3 build | Lift-and-compile in Phase 2 |
 | Q7 | How does Fuse render TS2068 hi-res (512-pixel) mode, and does it follow the beam? | Phase 3 display | Read `display.c`; compare with TSRun's documented raster model |
-| Q9 | Is a PSRAM DMA framebuffer on the MIPI-DSI path fast enough while the Z80 is running? | Phase 3 display | Measure in Phase 3 |
+| Q9 | Is a PSRAM DMA framebuffer on the MIPI-DSI path fast enough while the Z80 is running? | Phase 3 display | **Answered 2026-10-30: yes.** The worst frame is 9.9 ms with the Z80 included: triple buffers, with the PPA doing the copies (DECISIONS.md D6) |
 | Q10 | Does Fuse's contention model match the SCLD? (a) Is the delay pattern the same as the Spectrum ULA's `6,5,4,3,2,1,0,0`? (b) Which SCLD activities stop the Z80 clock, and at which T-states in a line and in a frame? (c) Is I/O contended as well, and which ports? (d) Since the SCLD stops the Z80 clock outright, does that stall refresh and no-MREQ cycles too, so the Spectrum's per-cycle `no_mreq` delays don't apply? Test: point I at 0x40–0x7F on a real 2068 and confirm no snow. | Accuracy (timing-sensitive loaders, demos, raster effects) | Timex/SCLD documentation (David is locating it), Hildreth documents, then timing tests on a real TS2068 |
 
 Q8 (licensing) is closed: see §2, "Licensing outcome".
@@ -230,7 +230,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 
 ### Phase 3: P4 platform layer
 - [ ] **Build system:** ESP-IDF components (CMake) for each layer. No autotools.
-- [ ] **Display:** 1024×600 panel. The TS2068's 320×240 picture (screen plus border) doubled is 640×480, which leaves a 384-pixel side panel. Handle hi-res and decide whether to follow the beam (Q7); TSRun's raster model is the reference description.
+- [ ] **Display:** 1024×600 panel. The TS2068's 320×240 picture (screen plus border) doubled is 640×480, which leaves a 384-pixel side panel. Handle hi-res and decide whether to follow the beam (Q7); TSRun's raster model is the reference description. *2026-10-30: the panel runs from `platform/p4_display.c`, with the machine in real time on core 0 and a frame drawn once per TS2068 frame (DECISIONS.md D6). Hi-res is drawn, since the 640-wide picture holds it. Beam following is still to do.*
 - [ ] **Audio:** I2S to the onboard amplifier, carrying the SCLD beeper and the AY. Pace the frame loop by the audio, as ESPectrum and TSRun both do, and emit edges at the T-state they happen.
 - [ ] **Storage:** microSD for ROMs, settings and snapshots.
 - [ ] **Input, stage 1:** an on-screen TS2068 keyboard with multi-touch, so CAPS SHIFT and SYMBOL SHIFT combinations work.

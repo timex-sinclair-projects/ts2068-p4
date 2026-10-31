@@ -1,5 +1,6 @@
 # ts2068: the emulated TS2068 (machine/ on a Z80 core) as a MicroPython
-# user C module. For now it only runs the Phase 2 benchmark (modts2068.c).
+# user C module: the Phase 2 benchmark, and the machine in real time on the
+# panel (platform/p4_display.c).
 #
 # The Z80 core is Fuse's (z80/) unless the environment says
 # TS2068_CORE=jls at configure time, which builds Z80_JLS (z80_jls/)
@@ -34,6 +35,7 @@ target_sources(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}/machine/event.c
     ${TS2068_CORE_SRC}
     ${TS2068_ROOT}/test/machine/basic_loop.c
+    ${TS2068_ROOT}/platform/p4_display.c
 )
 
 target_include_directories(usermod_ts2068 INTERFACE
@@ -42,9 +44,14 @@ target_include_directories(usermod_ts2068 INTERFACE
     ${TS2068_ROOT}/z80_jls
     ${TS2068_ROOT}/machine
     ${TS2068_ROOT}/test/machine
+    ${TS2068_ROOT}/platform
     ${TS2068_ROOT}              # z80_ops.c includes "z80/opcodes_base.c"
 )
 
 target_compile_definitions(usermod_ts2068 INTERFACE HAVE_ENOUGH_MEMORY)
+
+# MicroPython's main component doesn't ask for these IDF components, but
+# they're in the build
+target_link_libraries(usermod_ts2068 INTERFACE idf::esp_lcd idf::esp_driver_ledc idf::esp_driver_ppa)
 
 target_link_libraries(usermod INTERFACE usermod_ts2068)

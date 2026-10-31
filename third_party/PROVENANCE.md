@@ -32,6 +32,15 @@ One row per file copied into `machine/`, `z80/`, `z80_jls/` or `tspico/`. Note a
 | `z80_jls/z80_jls.cpp`, `z80_jls/z80_jls.h` | `third_party/ZX-ESPectrum-IDF` | `src/Z80_JLS.cpp`, `include/Z80_JLS/z80.h` | `2a2c335` | GPL-3.0. ESPectrum's hooks removed (TR-DOS, tape traps, video, CPU loop); `step`, `takeINT` and the `z80_core.h` functions added. Not linked by default. See `z80_jls/README.md` |
 | `z80_jls/z80_jls_ops.h` | `third_party/ZX-ESPectrum-IDF` | `include/Z80_JLS/z80operations.h` (replaced) | `2a2c335` | Rewritten on `z80/z80_glue.h` |
 
+## Facts taken from other sources
+
+No code is copied from these. `platform/p4_display.c` uses their values (register writes, timings, pins), as noted at the top of the file.
+
+| Source | Version | License | What |
+|---|---|---|---|
+| Elecrow `CrowPanel-Advanced-7inch-ESP32-P4-HMI-AI-Display-1024x600-IPS-Touch-Screen`, `example/V1.2/idf-code/Lesson07-Turn_on_the_screen` (not a submodule; cloned to `~/esp/ref/crowpanel-p4`) | `f0ebc0c` | none stated | DSI lanes and rate, DPI timing, LDO3 at 2.5 V, backlight on GPIO31 |
+| Espressif `esp_lcd_ek79007` (component registry, as vendored in that example) | 1.0.2 | Apache-2.0 | The EK79007's start-up register writes |
+
 ## Not used
 
 - **TSRun** (https://github.com/josef-jelinek/TSRun): no license. Its README may be read as documentation; no code is copied.

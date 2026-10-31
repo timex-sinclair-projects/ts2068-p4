@@ -70,6 +70,11 @@ void ts2068_set_joystick( int which, uint8_t bits );
 #define TS2068_SCREEN_HEIGHT 240
 void ts2068_render( uint8_t *pixels );
 
+/* One line of the same picture, 0-239, into TS2068_SCREEN_WIDTH bytes:
+   so a display can take the picture a line at a time without holding
+   all 150K of it. */
+void ts2068_render_line( int line, uint8_t *row );
+
 /* The CPU and SCLD state, for tests and the comparison against Fuse. */
 typedef struct {
   uint16_t af, bc, de, hl, af_, bc_, de_, hl_, ix, iy, sp, pc;
