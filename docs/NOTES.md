@@ -433,6 +433,28 @@ DECISIONS.md D5 explains the 11 coretest differences. None of them shows in a TS
 
 **Gate 3 (2026-10-31).** On the panel with the TS-Pico ROM, display, sound and the Bluetooth keyboard: `10 FOR i=1 TO 30000: PRINT AT 0,0;i: NEXT i`, typed through the key matrix and RUN, keeps FRAMES (23672) going up 60.10 times a wall-clock second, the panel's rate, which the I2S clock paces. The emulator takes 5.2 ms of the 16.6 ms frame (5.7 at most), with no late frames or underruns over 10 s.
 
+**A contention probe for a real TS2068 (Q10, 2026-10-31).** `test/basic/q10probe.asm` measures the SCLD's contention so that a real machine's numbers can be set beside the model's, number for number. `test/basic/q10probe.tap` (`make -C test/machine q10probe` builds it and runs the host side) loads from BASIC: `CLEAR 32767`, the code at 32768, `RANDOMIZE USR 32768`. It takes the interrupt in IM 2 with its own handler, then for each test counts the passes of a loop over two frames. The loop's first instruction is the access under test, and the rest runs from uncontended RAM. A 3-byte pad sets the loop's period to each of eight values a T-state apart. With a period that's a multiple of 8, an 8-T-state pattern is met at the same place every pass; other periods walk through it. So the eight counts show the pattern's shape, not just its average (Q10a). Long counts also average out the 0-3 T-states the interrupt's timing varies by on hardware. Tests:
+- reads at 4000h and 7FFFh, a write, and the loop run from attribute row 23 (opcode fetches);
+- EXROM and DOCK paged into chunk 2;
+- IN from FE, FF and F4 with high bytes 80h and 40h, and from FB with 40h, against FB with 80h (Q10c);
+- 50 frames uncontended, for the frame's length;
+- the snow test (Q10d): I at 4000h for 5 s while code runs.
+
+The screen shows the counts, and the losses against the reference. The 256 bytes at 37376 hold every count, and line 30 of the loader saves them (`GO TO 30`). `tools/host/q10probe.py --hw q10res.bin` compares them with the host machine's, which runs the same code (`run_ts2068 --call`). In the model (Fuse's `6,5,4,3,2,1,0,0` everywhere):
+
+| | pad 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 |
+|---|---|---|---|---|---|---|---|---|
+| REF (count) | 2212 | 2171 | 2131 | 2093 | 2057 | 2021 | 1987 | 1954 |
+| R40, R7F, W5A (lost) | 86 | 57 | 28 | 0 | 37 | 57 | 32 | 42 |
+| X5A (lost) | 471 | 441 | 412 | 384 | 358 | 373 | 361 | 352 |
+| EXR, DCK (lost; Fuse: as R40) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| 80FE, 80FF, 80F4 (lost) | 57 | 32 | 42 | 39 | 43 | 22 | 0 | 28 |
+| 40FE, 40FF, 40F4 (lost) | 57 | 66 | 42 | 39 | 44 | 22 | 0 | 44 |
+| 40FB (lost) | 112 | 115 | 128 | 114 | 108 | 104 | 83 | 76 |
+| FRM (50 frames) | 55287 | 54263 | 53277 | 52325 | 51407 | 50521 | 49665 | 48837 |
+
+FRM gives 58688 T-states a frame (224 × 262), and the period of 56 (pad 14) loses nothing, as it should. On a TS2068, a different R40 row means a different pattern; zeros in EXR and DCK confirm the DOCK finding; and snow means the clock stop doesn't cover refresh. Not yet run on hardware.
+
 **Still to do, not blocking (2026-10-31):**
 
 - **esp-hosted 2.7.0 against the C6's 2.12:** MicroPython v1.29 pins `espressif/esp_hosted` 2.7.0 and `esp_wifi_remote` 0.15.2 together in `ports/esp32/main/idf_component.yml`, so upgrading means changing MicroPython's tree. The link, BLE and Wi-Fi work; the boot log's version warning is advice. Left as it is.

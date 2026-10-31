@@ -7,6 +7,8 @@
 #                                   # (run_ts2068-float), to within 1
 #   make -C test/machine szx        # SZX snapshots against libspectrum and
 #                                   # fuse-tspico (needs ~/esp/ref/prefix)
+#   make -C test/machine q10probe   # the SCLD contention probe's counts here
+#                                   # (PLAN.md Q10); q10probe.tap for a TS2068
 # compare needs ~/esp/ref/fuse-tspico (docs/NOTES.md) and sjasmplus.
 ROOT := ../..
 CFLAGS ?= -O2 -Wall
@@ -34,6 +36,17 @@ beam-rom: $(TIMING)/beam-home.rom
 
 $(TIMING)/sound-home.rom $(TIMING)/sound-exrom.rom: $(TIMING)/sound.asm
 	cd $(TIMING) && sjasmplus --nologo sound.asm
+
+# The contention probe: the code, and a TAP with its BASIC loader
+$(TIMING)/q10probe.bin $(TIMING)/q10probe-code.tap: $(TIMING)/q10probe.asm
+	cd $(TIMING) && rm -f q10probe-code.tap && sjasmplus --nologo q10probe.asm
+
+$(TIMING)/q10probe.tap: $(TIMING)/q10loader.bas $(TIMING)/q10probe-code.tap
+	cd $(TIMING) && zmakebas -a 10 -n q10probe -o q10loader.tap q10loader.bas && \
+	    cat q10loader.tap q10probe-code.tap > q10probe.tap && rm q10loader.tap
+
+q10probe: run_ts2068 $(TIMING)/q10probe.bin $(TIMING)/q10probe.tap
+	python3 $(ROOT)/tools/host/q10probe.py
 
 # The P4's sound arithmetic (machine/sound/sound_real.h)
 run_ts2068-float$(SUFFIX): $(SRC) $(CORE_DEPS) $(wildcard $(ROOT)/machine/*.h $(ROOT)/machine/sound/*.h basic_loop.h)

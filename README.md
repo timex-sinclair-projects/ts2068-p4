@@ -2,6 +2,8 @@
 
 A standalone Timex/Sinclair 2068 with a TS-Pico, running on an Elecrow CrowPanel Advanced 7" ESP32-P4.
 
+![The TS2068 emulator on the CrowPanel, running the TS-Pico ROM, with the side menu and a Bluetooth keyboard connected](docs/images/ts2068-p4.jpg)
+
 The emulator runs on one P4 core; the real TS-Pico MicroPython firmware runs on the other. See [PLAN.md](PLAN.md) for the architecture and phases.
 
 ## Layout

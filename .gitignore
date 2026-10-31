@@ -29,3 +29,5 @@ test/z80/zexrun-jls
 test/machine/run_ts2068-jls
 test/machine/run_ts2068-float
 test/machine/szx_resave
+test/basic/q10probe.bin
+test/basic/q10probe-code.tap

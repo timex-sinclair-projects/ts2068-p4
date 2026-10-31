@@ -6,6 +6,7 @@
                 [--screen screen.ppm] [--ram ram.bin] [--time] [--bench]
                 [--audio audio.raw [--rate 44100]]
                 [--load-szx in.szx] [--save-szx out.szx]
+                [--call ADDR code.bin]
 
    --rom1 may be 8K or 16K. A 32K TS-Pico ROM can be given as --rom alone:
    its first half is HOME, its second the EXROM. No TS-Pico is attached,
@@ -15,7 +16,9 @@
    host's byte order, as Fuse's --automation-capture-audio writes into its
    WAV. --load-szx restores a snapshot before the first frame (the ROMs
    still come from --rom/--rom0/--rom1); --save-szx writes one after the
-   last (machine/szx.c). */
+   last (machine/szx.c). --call puts code.bin at ADDR once the ROM has
+   booted and calls it, as RANDOMIZE USR ADDR would: it returns to where
+   the ROM was waiting for a key (test/basic/q10probe.asm). */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,12 +91,37 @@ write_state( const char *path, unsigned frames )
   fclose( f );
 }
 
+/* --call: when, well after the ROM has booted and is waiting for a key */
+#define CALL_FRAME 300
+
+/* Put a file in memory at addr and call it: the return address pushed,
+   the CPU out of HALT */
+static void
+call_code( unsigned addr, const char *path )
+{
+  size_t n, k;
+  unsigned char *code = load( path, &n );
+  ts2068_snap_t snap;
+
+  for( k = 0; k < n; k++ ) ts2068_poke( addr + k, code[ k ] );
+  free( code );
+  ts2068_snap_get( &snap );
+  snap.sp -= 2;
+  ts2068_poke( snap.sp, snap.pc & 0xff );
+  ts2068_poke( snap.sp + 1, snap.pc >> 8 );
+  snap.pc = addr;
+  snap.halted = 0;
+  ts2068_snap_set( &snap );
+}
+
 int
 main( int argc, char **argv )
 {
   const char *rom = NULL, *rom0 = NULL, *rom1 = NULL;
   const char *state = NULL, *screen = NULL, *ramfile = NULL, *audio = NULL;
   const char *load_szx = NULL, *save_szx = NULL;
+  const char *call_file = NULL;
+  unsigned call_addr = 0;
   FILE *audio_f = NULL;
   unsigned frames = 100, i;
   int rate = 44100;
@@ -116,6 +144,9 @@ main( int argc, char **argv )
     else if( !strcmp( a, "--rate" ) && v ) { rate = atoi( v ); i++; }
     else if( !strcmp( a, "--load-szx" ) && v ) { load_szx = v; i++; }
     else if( !strcmp( a, "--save-szx" ) && v ) { save_szx = v; i++; }
+    else if( !strcmp( a, "--call" ) && v && i + 2 < (unsigned)argc ) {
+      call_addr = strtoul( v, NULL, 0 ); call_file = argv[ i + 2 ]; i += 2;
+    }
     else if( !strcmp( a, "--fuse-contention" ) ) cfg.fuse_dock_contention = 1;
     else if( !strcmp( a, "--time" ) ) timed = 1;
     else if( !strcmp( a, "--bench" ) ) bench = 1;
@@ -156,6 +187,7 @@ main( int argc, char **argv )
   t0 = clock();
   for( i = 0; i < frames; i++ ) {
     if( bench ) basic_loop_frame( i );
+    if( call_file && i == CALL_FRAME ) call_code( call_addr, call_file );
     ts2068_run_frame();
     if( audio_f ) {
       int count;
