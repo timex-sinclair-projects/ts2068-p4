@@ -7,13 +7,13 @@
 # The rows and taps are ts2068.osd() and ts2068.osd_tap() (platform/
 # p4_osd.c); the files and settings are emu.py's. The main page:
 #
-#   TS2068  <the ROM>
+#   <the ROM>
 #   Load ROM          a ROM from /TS2068/ROMS, kept as the setting
 #   Load snapshot     from /TS2068/SNAPS
 #   Save snapshot     to SNAPS, as SNAPnnn.szx, the next number free
 #   Reset             the machine started again from the settings
 #   Keyboard          pair a Bluetooth keyboard, or forget it (btkbd.py)
-#   Volume  -  10  +
+#   Volume  -   10  +
 #
 # A list page shows seven names at a time, with Back, up and down. The
 # bottom row is the status line; the keyboard's progress shows there as it
@@ -29,9 +29,10 @@ import emu
 import ts2068
 
 ROWS = 10
-COLS = 31
+COLS = 19
 PLAIN, INVERSE, BUTTON = 0, 1, 2
 LIST_ROWS = 7                           # rows 1-7 of a list page
+_VOLUME = " Volume  -  %3d  +"          # - at column 9, + at 17
 
 _page = None                            # "main", "roms", "snaps" or "kbd"
 _items = []
@@ -54,14 +55,14 @@ def _main():
     global _page
     _page = "main"
     s = emu.settings()
-    _row(0, " TS2068  " + s["rom"], INVERSE)
+    _row(0, " " + s["rom"], INVERSE)
     _row(1, "")
     _row(2, "  Load ROM", BUTTON)
     _row(3, "  Load snapshot", BUTTON)
     _row(4, "  Save snapshot", BUTTON)
     _row(5, "  Reset", BUTTON)
     _row(6, "  Keyboard", BUTTON)
-    _row(7, "  Volume    -   %3d   +" % s["volume"])
+    _row(7, _VOLUME % s["volume"])
     _row(8, "")
     _say(_status)
 
@@ -80,7 +81,7 @@ def _show_list():
             _row(1 + i, "  " + _items[n], BUTTON)
         else:
             _row(1 + i, "  (none)" if n == 0 else "")
-    _row(8, "  < Back      up       down")
+    _row(8, " < Back   up  down")
     _say("%d-%d of %d" % (_top + 1 if _items else 0,
                           min(_top + LIST_ROWS, len(_items)), len(_items)))
 
@@ -132,23 +133,23 @@ def _tap_main(row, col):
     elif row == 7:
         s = emu.settings()
         v = s["volume"]
-        if 10 <= col <= 14:
+        if 7 <= col <= 11:
             v = max(0, v - 5)
-        elif 20 <= col <= 24:
+        elif col >= 15:
             v = min(100, v + 5)
         else:
             return
         ts2068.volume(v)
         emu.save(volume=v)
-        _row(7, "  Volume    -   %3d   +" % v)
+        _row(7, _VOLUME % v)
 
 
 def _tap_list(row, col):
     global _top
     if row == 8:
-        if col < 10:
+        if col < 9:
             _main()
-        elif col < 19:
+        elif col < 14:
             _top = max(0, _top - LIST_ROWS)
             _show_list()
         elif _top + LIST_ROWS < len(_items):

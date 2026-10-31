@@ -1,9 +1,11 @@
 /* p4_display.h: the CrowPanel Advanced 7"'s 1024x600 MIPI-DSI panel
    (EK79007), for the TS2068's picture.
 
-   The TS2068's 640x240 picture is drawn with every line doubled, 640x480,
-   on the left of the panel, with 60 lines above and below; the 384 pixels
-   to the right are the side panel (PLAN.md Phase 3, "Display"). Three
+   Of the TS2068's 640x240 picture (320x240 low-res pixels, the screen and
+   its border), the screen and 4 pixels of border round it, 264x200, are
+   drawn at 3x, 792x600, on the left of the panel; the 232 pixels to the
+   right are the side panel (PLAN.md Phase 3, "Display"). A hi-res pair of
+   pixels becomes three: the left, the two blended, the right. Three
    frame buffers in PSRAM, flipped at the panel's refresh, so a frame never
    tears and drawing never waits. The panel refreshes at 60.10 Hz. */
 
@@ -17,9 +19,10 @@
 #define P4_DISPLAY_WIDTH  1024
 #define P4_DISPLAY_HEIGHT 600
 
-/* Where the doubled TS2068 picture goes */
-#define P4_DISPLAY_TV_X 0
-#define P4_DISPLAY_TV_Y 60
+/* Where the TS2068 picture goes, and how wide it is */
+#define P4_DISPLAY_TV_X     0
+#define P4_DISPLAY_TV_Y     0
+#define P4_DISPLAY_TV_WIDTH 792
 
 /* Frame buffers, flipped in turn */
 #define P4_DISPLAY_BUFFERS 3
@@ -66,7 +69,7 @@ typedef struct {
 
 void p4_display_get_stats( p4_display_stats_t *stats );
 
-/* Compare the picture in the frame buffer last flipped, all 480 rows,
+/* Compare the picture in the frame buffer last flipped, all 600 rows,
    with render_line's: the number of pixels that differ, or -1 before
    init. Only meaningful while the machine is stopped. */
 int p4_display_check( p4_display_line_fn render_line );

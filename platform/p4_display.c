@@ -45,8 +45,16 @@ static const char *TAG = "p4_display";
 #define BACKLIGHT_CHANNEL   LEDC_CHANNEL_7
 #define BACKLIGHT_BITS      LEDC_TIMER_11_BIT
 
-#define TV_WIDTH            640         /* TS2068_SCREEN_WIDTH */
-#define TV_HEIGHT           240         /* TS2068_SCREEN_HEIGHT, doubled */
+#define TV_WIDTH            640         /* TS2068_SCREEN_WIDTH, hi-res columns */
+#define TV_HEIGHT           240         /* TS2068_SCREEN_HEIGHT */
+
+/* What's shown of it: the 256x192 screen and 4 pixels of border round it,
+   264x200 in low-res pixels, each drawn 3x3 */
+#define SHOW_X              56          /* hi-res columns cropped at the left */
+#define SHOW_COLS           264         /* low-res pixels: 528 hi-res columns */
+#define SHOW_Y              20          /* lines cropped at the top */
+#define SHOW_LINES          200
+#define PIC_W               P4_DISPLAY_TV_WIDTH  /* 3 * SHOW_COLS */
 
 /* EK79007 registers (esp_lcd_ek79007.c) */
 #define EK79007_PAD_CONTROL 0xb2
@@ -90,17 +98,20 @@ static uint16_t *fb[ NUM_FBS ];
 static volatile int flipped;            /* scanned from the next refresh */
 static volatile int scanning;           /* being scanned now */
 static volatile uint32_t refreshes;
-static uint32_t fb_lines[ NUM_FBS ][ TV_HEIGHT ];  /* hash of each line held */
-static uint32_t palette2[ 256 ];        /* two pixels, ( b << 4 ) | a */
+static uint32_t fb_lines[ NUM_FBS ][ SHOW_LINES ];  /* hash of each line held */
+static uint16_t palette3[ 256 ][ 3 ];   /* two hi-res pixels a and b, index
+                                           ( b << 4 ) | a, as three: a, the
+                                           two blended, b. Low-res: a = b */
 
-/* Changed lines are converted to RGB565 in internal RAM, a strip of up to
-   STRIP_LINES consecutive lines at a time, and the PPA copies each strip
-   into the frame buffer twice, once to the even rows and once to the odd
-   (doubling the lines without scaling: the frame buffer is treated as 300
-   rows of 2048 pixels, each holding two panel rows). Two strips, so the
-   CPU converts one while the PPA copies the other. The CPU never writes
-   the frame buffers in PSRAM, which it can only do at about 56 MB/s. */
-#define STRIP_LINES 16
+/* Changed lines are converted to RGB565 in internal RAM, three panel
+   pixels to a low-res pixel, a strip of up to STRIP_LINES consecutive
+   lines at a time, and the PPA copies each strip into the frame buffer
+   three times, once to each row of a line's three (tripling the lines
+   without scaling: the frame buffer is treated as 200 rows of 3072
+   pixels, each holding three panel rows). Two strips, so the CPU converts
+   one while the PPA copies the other. The CPU never writes the frame
+   buffers in PSRAM, which it can only do at about 56 MB/s. */
+#define STRIP_LINES 12
 static uint16_t *strip[ 2 ];
 static SemaphoreHandle_t strip_free[ 2 ];
 static ppa_client_handle_t ppa;
@@ -255,7 +266,7 @@ p4_display_init( void )
   }
 
   for( int i = 0; i < 2; i++ ) {
-    strip[i] = heap_caps_aligned_alloc( 64, TV_WIDTH * STRIP_LINES * 2,
+    strip[i] = heap_caps_aligned_alloc( 64, PIC_W * STRIP_LINES * 2,
                                         MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA );
     strip_free[i] = xSemaphoreCreateBinary();
     ESP_RETURN_ON_FALSE( strip[i] && strip_free[i], ESP_ERR_NO_MEM, TAG,
@@ -264,7 +275,7 @@ p4_display_init( void )
   }
   const ppa_client_config_t ppa_config = {
     .oper_type = PPA_OPERATION_SRM,
-    .max_pending_trans_num = 4,         /* two strips, two copies each */
+    .max_pending_trans_num = 6,         /* two strips, three copies each */
   };
   ESP_RETURN_ON_ERROR( ppa_register_client( &ppa_config, &ppa ), TAG, "PPA" );
   const ppa_event_callbacks_t ppa_cbs = { .on_trans_done = strip_copied };
@@ -280,7 +291,10 @@ p4_display_init( void )
     memset( fb_lines[i], 0, sizeof( fb_lines[i] ) );
   }
   for( int i = 0; i < 256; i++ ) {
-    palette2[i] = palette[ i & 0x0f ] | ( palette[ i >> 4 ] << 16 );
+    uint16_t a = palette[ i & 0x0f ], b = palette[ i >> 4 ];
+    palette3[i][0] = a;
+    palette3[i][1] = ( ( a & 0xf7de ) >> 1 ) + ( ( b & 0xf7de ) >> 1 );
+    palette3[i][2] = b;
   }
   flipped = scanning = 0;               /* the driver starts on fb[0] */
   memset( &stats, 0, sizeof( stats ) );
@@ -292,31 +306,31 @@ p4_display_init( void )
 static uint32_t
 line_hash( const uint8_t *s )
 {
-  const uint32_t *w = (const uint32_t *)s;
+  const uint32_t *w = (const uint32_t *)( s + SHOW_X );
   uint32_t h = 0x811c9dc5;
-  for( int i = 0; i < TV_WIDTH / 4; i++ ) h = ( h ^ w[i] ) * 0x9e3779b1;
+  for( int i = 0; i < 2 * SHOW_COLS / 4; i++ ) h = ( h ^ w[i] ) * 0x9e3779b1;
   return h | 1;
 }
 
-/* Copy strip k, holding n lines from TS2068 line y0, into frame buffer t:
-   once to the even rows, once to the odd. The second copy gives the
-   strip back when it's done. */
+/* Copy strip k, holding n lines from shown line y0, into frame buffer t:
+   once to each row of the three. The last copy gives the strip back when
+   it's done. */
 static void
 copy_strip( int k, int n, int y0, int t )
 {
   ppa_srm_oper_config_t op = {
     .in = {
       .buffer = strip[k],
-      .pic_w = TV_WIDTH, .pic_h = n,
-      .block_w = TV_WIDTH, .block_h = n,
+      .pic_w = PIC_W, .pic_h = n,
+      .block_w = PIC_W, .block_h = n,
       .srm_cm = PPA_SRM_COLOR_MODE_RGB565,
     },
     .out = {
       .buffer = fb[t],
       .buffer_size = P4_DISPLAY_WIDTH * P4_DISPLAY_HEIGHT * 2,
-      .pic_w = 2 * P4_DISPLAY_WIDTH, .pic_h = P4_DISPLAY_HEIGHT / 2,
+      .pic_w = 3 * P4_DISPLAY_WIDTH, .pic_h = P4_DISPLAY_HEIGHT / 3,
       .block_offset_x = P4_DISPLAY_TV_X,
-      .block_offset_y = P4_DISPLAY_TV_Y / 2 + y0,
+      .block_offset_y = P4_DISPLAY_TV_Y / 3 + y0,
       .srm_cm = PPA_SRM_COLOR_MODE_RGB565,
     },
     .rotation_angle = PPA_SRM_ROTATION_ANGLE_0,
@@ -325,9 +339,29 @@ copy_strip( int k, int n, int y0, int t )
   };
   ppa_do_scale_rotate_mirror( ppa, &op );
   op.out.block_offset_x += P4_DISPLAY_WIDTH;
+  ppa_do_scale_rotate_mirror( ppa, &op );
+  op.out.block_offset_x += P4_DISPLAY_WIDTH;
   op.user_data = strip_free[k];
   ppa_do_scale_rotate_mirror( ppa, &op );
   stats.strips++;
+}
+
+/* line_buf's shown part as panel pixels: each pair of hi-res columns, one
+   low-res pixel, as three. Two low-res pixels at a time, six panel
+   pixels, written as three words. */
+static void
+convert( uint16_t *d16 )
+{
+  const uint32_t *src = (const uint32_t *)( line_buf + SHOW_X );
+  uint32_t *d = (uint32_t *)d16;
+  for( int x = 0; x < SHOW_COLS / 2; x++, d += 3 ) {
+    uint32_t four = src[x];             /* little-endian: column 4x low */
+    const uint16_t *p = palette3[ ( four & 0x0f ) | ( ( four >> 4 ) & 0xf0 ) ];
+    const uint16_t *q = palette3[ ( ( four >> 16 ) & 0x0f ) | ( ( four >> 20 ) & 0xf0 ) ];
+    d[0] = p[0] | ( (uint32_t)p[1] << 16 );
+    d[1] = p[2] | ( (uint32_t)q[0] << 16 );
+    d[2] = q[1] | ( (uint32_t)q[2] << 16 );
+  }
 }
 
 int
@@ -349,10 +383,10 @@ p4_display_ts2068( p4_display_line_fn render_line )
   while( t == f || t == s ) t++;
 
   bool changed = false;                 /* from the frame last shown */
-  int first = TV_HEIGHT, last = -1, converted = 0;
+  int first = SHOW_LINES, last = -1, converted = 0;
   int k = 0, n = 0, y0 = 0;             /* the strip being filled */
-  for( int y = 0; y < TV_HEIGHT; y++ ) {
-    render_line( y, line_buf );
+  for( int y = 0; y < SHOW_LINES; y++ ) {
+    render_line( SHOW_Y + y, line_buf );
     uint32_t h = line_hash( line_buf );
     if( h != fb_lines[f][y] ) changed = true;
     if( h == fb_lines[t][y] ) {
@@ -364,12 +398,7 @@ p4_display_ts2068( p4_display_line_fn render_line )
       xSemaphoreTake( strip_free[k], portMAX_DELAY );
       y0 = y;
     }
-    const uint16_t *src = (const uint16_t *)line_buf;
-    uint32_t *d = (uint32_t *)( strip[k] + n * TV_WIDTH );
-    for( int x = 0; x < TV_WIDTH / 2; x++ ) {
-      uint16_t two = src[x];            /* little-endian: pixel x*2 low */
-      d[x] = palette2[ ( two & 0x0f ) | ( ( two >> 4 ) & 0xf0 ) ];
-    }
+    convert( strip[k] + n * PIC_W );
     n++;
     fb_lines[t][y] = h;
     converted++;
@@ -393,10 +422,10 @@ p4_display_ts2068( p4_display_line_fn render_line )
      that buffer is scanned from the next refresh. (Its cache write-back
      finds nothing to write: the PPA wrote these rows, not the CPU.) */
   int64_t t1 = esp_timer_get_time();
-  esp_lcd_panel_draw_bitmap( panel, P4_DISPLAY_TV_X, P4_DISPLAY_TV_Y + 2 * first,
-                             P4_DISPLAY_TV_X + TV_WIDTH,
-                             P4_DISPLAY_TV_Y + 2 * last + 2,
-                             fb[t] + ( P4_DISPLAY_TV_Y + 2 * first ) * P4_DISPLAY_WIDTH
+  esp_lcd_panel_draw_bitmap( panel, P4_DISPLAY_TV_X, P4_DISPLAY_TV_Y + 3 * first,
+                             P4_DISPLAY_TV_X + PIC_W,
+                             P4_DISPLAY_TV_Y + 3 * last + 3,
+                             fb[t] + ( P4_DISPLAY_TV_Y + 3 * first ) * P4_DISPLAY_WIDTH
                              + P4_DISPLAY_TV_X );
   flipped = t;
 
@@ -437,12 +466,16 @@ p4_display_check( p4_display_line_fn render_line )
   int bad = 0;
   esp_cache_msync( (void *)f, P4_DISPLAY_WIDTH * P4_DISPLAY_HEIGHT * 2,
                    ESP_CACHE_MSYNC_FLAG_DIR_M2C );
-  for( int y = 0; y < 2 * TV_HEIGHT; y++ ) {
-    if( !( y & 1 ) ) render_line( y / 2, line_buf );
+  static uint16_t want[ PIC_W ];
+  for( int y = 0; y < 3 * SHOW_LINES; y++ ) {
+    if( y % 3 == 0 ) {
+      render_line( SHOW_Y + y / 3, line_buf );
+      convert( want );
+    }
     const uint16_t *row = f + ( P4_DISPLAY_TV_Y + y ) * P4_DISPLAY_WIDTH
                           + P4_DISPLAY_TV_X;
-    for( int x = 0; x < TV_WIDTH; x++ ) {
-      if( row[x] != palette[ line_buf[x] & 0x0f ] ) bad++;
+    for( int x = 0; x < PIC_W; x++ ) {
+      if( row[x] != want[x] ) bad++;
     }
   }
   return bad;

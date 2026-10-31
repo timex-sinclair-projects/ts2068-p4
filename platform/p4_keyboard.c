@@ -16,7 +16,7 @@
 #define COLS    10
 #define ROWS    4
 #define KEYS    ( COLS * ROWS )
-#define PITCH_X 38
+#define PITCH_X 23                       /* 230: the side panel, less 2 */
 #define PITCH_Y 90
 #define KB_X    ( P4_DISPLAY_WIDTH - 2 - COLS * PITCH_X )
 #define KB_Y    ( P4_DISPLAY_HEIGHT - ROWS * PITCH_Y )
@@ -26,16 +26,17 @@
 #define COLOUR_FACE  0x3186             /* dark grey */
 #define COLOUR_LABEL 0xffff
 
-/* Main label (drawn twice size), then the smaller one under it, if any */
+/* Main label (drawn twice size), then the smaller one under it, if any:
+   three letters at most, for 19-pixel keys */
 static const char *const labels[ KEYS ][2] = {
   { "1" }, { "2" }, { "3" }, { "4" }, { "5" },
   { "6" }, { "7" }, { "8" }, { "9" }, { "0" },
   { "Q" }, { "W" }, { "E" }, { "R" }, { "T" },
   { "Y" }, { "U" }, { "I" }, { "O" }, { "P" },
   { "A" }, { "S" }, { "D" }, { "F" }, { "G" },
-  { "H" }, { "J" }, { "K" }, { "L" }, { NULL, "ENTER" },
-  { NULL, "CAPS\nSHIFT" }, { "Z" }, { "X" }, { "C" }, { "V" },
-  { "B" }, { "N" }, { "M" }, { NULL, "SYMBOL\nSHIFT" }, { NULL, "BREAK\nSPACE" },
+  { "H" }, { "J" }, { "K" }, { "L" }, { NULL, "ENT" },
+  { NULL, "CAP\nSHF" }, { "Z" }, { "X" }, { "C" }, { "V" },
+  { "B" }, { "N" }, { "M" }, { NULL, "SYM\nSHF" }, { NULL, "BRK\nSPC" },
 };
 
 static uint8_t font[ 96 * 8 ];

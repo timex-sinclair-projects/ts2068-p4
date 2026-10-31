@@ -108,6 +108,8 @@ The numbers are in NOTES.md, "Phase 3 progress". This answers Q9: the worst fram
 - **The `esp_lcd_ek79007` managed component:** seven register writes don't justify a component-manager dependency in MicroPython's build.
 - **Drawing through `esp_lcd_panel_draw_bitmap` copies:** they always go into the buffer currently on screen.
 
+**Full height, 2026-10-31:** the picture is now the screen and 4 pixels of border round it, 264×200 of the 320×240, at 3×: 792×600, the panel's whole height, with a 232-pixel side panel. Each low-res pixel becomes three panel pixels as the CPU converts it (a hi-res pair, three: the left, a blend, the right), and the PPA copies each strip three times, one row of every three each time, so it still never scales. Letting the PPA's scaler triple the rows (`scale_y = 3`, one copy) was faster in the worst case, 7.0 ms against 11.6, but not exact: 8,406 pixels differed, so rows are blended. Rejected with it: 3.125× (800×600, no border), whose pixels would be 3 and 4 wide. The cost is the worst case: every line changed every frame takes 11.6 ms of display beside the emulator's 4.8, against 16.6 (NOTES.md, Phase 3).
+
 **Following the beam (Q7), 2026-10-31:** the machine copies the picture in 8-pixel chunks as the beam passes, as Fuse does, and `ts2068_render_line` draws from those copies (docs/NOTES.md, Phase 3).
 
 ## D7. Sound: Fuse's, paced by the I2S clock (2026-10-30)

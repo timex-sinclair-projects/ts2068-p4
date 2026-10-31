@@ -17,7 +17,7 @@
 #include "p4_touch.h"
 
 #define P4_OSD_ROWS 10
-#define P4_OSD_COLS 31
+#define P4_OSD_COLS 19
 
 enum {
   P4_OSD_PLAIN,                 /* white on black */

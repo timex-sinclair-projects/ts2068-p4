@@ -12,8 +12,8 @@
 #include "p4_display.h"
 #include "p4_osd.h"
 
-#define AREA_X  ( P4_DISPLAY_WIDTH - 2 - 380 )  /* lined up with the keyboard */
-#define AREA_W  380
+#define AREA_X  ( P4_DISPLAY_WIDTH - 2 - 230 )  /* lined up with the keyboard */
+#define AREA_W  230
 #define ROW_H_SHORT 24                          /* above the keyboard */
 #define ROW_H_TALL  ( P4_DISPLAY_HEIGHT / P4_OSD_ROWS )  /* the whole panel */
 #define GLYPH_W 6                               /* the font's columns 1-6 */
