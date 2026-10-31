@@ -1,6 +1,6 @@
 # A third board: the ESP32-P4 (proposal draft)
 
-Status: **draft, not yet sent upstream.** This is the firmware change that PLAN.md §1.3 calls for. Once it's agreed it becomes an issue, then a PR, in `tspico-firmware-build`. It's based on what the Phase 1 prototype needed: `tspico/py/p4host.py` and its stand-ins, with the firmware pinned at `58ccbcd`. Line numbers are from that commit.
+Status: **opened upstream 2026-10-31 as https://github.com/timex-sinclair-projects/tspico-firmware-build/issues/354.** This is the firmware change that PLAN.md §1.3 calls for. Once it's agreed it becomes an issue, then a PR, in `tspico-firmware-build`. It's based on what the Phase 1 prototype needed: `tspico/py/p4host.py` and its stand-ins, with the firmware pinned at `58ccbcd` (v2.3.1). Checked again on 2026-10-31 against upstream main, `f37fc8c` (v2.3.1-61): every line number below is the same on both, and the only change that matters here is four new board names (change 5).
 
 ## Why
 
@@ -55,6 +55,7 @@ The CID is an open question for the P4. MicroPython's esp32 `SDCard` doesn't exp
 | Name | P4 |
 |---|---|
 | `NAME`, `PIO_MQ`, `SLOTS`, `HAS_CORE1` | `"p4"`, False, False (the emulator owns memory and paging), False (MicroPython's threads share core 1 under the GIL; core 0 is the emulator's) |
+| `LABEL`, `SD_SLOTS`, `HAS_MODEM`, `HAS_SPEECH` (new since v2.3.1) | `"P4"`, False, False, False. With the two flags False, `tspico.py` never calls the v3-only `modem_*`, `speech_start` or `say`, so `board_p4` doesn't define them. The P4 has audio, so speech could come later through the emulator's sound path. |
 | `early_init()` | nothing (the CPU clock is IDF's) |
 | `make_mq()` | `p4bridge.MQ()`, with both queues emptied |
 | `restart_mq(MQ)` | nothing |
