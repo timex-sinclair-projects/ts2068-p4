@@ -244,7 +244,7 @@ Each phase ends in a **gate**: a pass/fail result that decides whether to contin
 - [x] Port Fuse's `tspico.c` hook into `/tspico`, calling `p4bridge` in place of sockets. *2026-10-31: `machine/ts2068.c` already had the port hook; `ts2068.run(..., tspico=True)` points it at `p4bridge_frame()`, and `emu.start()` does that for a 32K TS-Pico ROM, starting the firmware first. `LOAD ""` works on the panel (docs/NOTES.md, Phase 4). Emulated time pauses while the firmware answers, about 250 ms over a load.*
 - [ ] Map the firmware's SD view to the microSD card (Q5), using the same layout as a real TS-Pico card. Give the Pico flash view (`config.ini`, `assets`, `TMP`) its own folder or a flash partition.
 - [ ] Switch from the temporary stand-ins to the upstream platform layer (§1.3), once that has merged.
-- [ ] Run the Phase 0 sessions on the P4 and compare them with the desktop traces.
+- [ ] Run the Phase 0 sessions on the P4 and compare them with the desktop traces. *2026-10-31: fuse-smoke on the live machine gives the same 2,451 frames as fuse-tspico + `pico_host`, apart from the FRAMES-based session id and status-poll timing (`tools/p4/capture_load.py`, `tools/host/compare_frames.py --timing`; docs/NOTES.md, Phase 4). zesarux-smoke still to do.*
 
 **Gate 4:** the same sessions behave the same on the P4 and on fuse-tspico + `pico_host`.
 

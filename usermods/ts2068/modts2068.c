@@ -15,6 +15,8 @@
 //   ts2068.snapshot()                # -> SZX bytes (machine/szx.c)
 //   ts2068.load_snapshot(data)       # after run(), running or stopped
 //   ts2068.keys(rows)                # hold keys (8 half-rows); keys() releases
+//   ts2068.pico_trace(n)             # keep the next n TS-Pico bus frames;
+//   ts2068.pico_trace()              # -> them, 3 bytes each
 //   ts2068.osd(row, text, style=0)   # the side panel's menu rows (osd.py)
 //   ts2068.osd_tap()                 # -> (row, column) of a tap, or None
 //   ts2068.display_check()           # -> pixels differing from the machine
@@ -28,6 +30,7 @@
 
 #include <string.h>
 
+#include "esp_heap_caps.h"
 #include "esp_memory_utils.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -265,22 +268,61 @@ static void run_task(void *arg) {
 
 // Ports 0Eh/0Fh, from the run task on core 0, to the firmware on core 1.
 // The ops are the same numbers on both sides (machine.h, p4bridge.h).
+// pico_trace(n): every frame is kept, 3 bytes each (op, value, reply), as
+// tools/p4/pack_frames.py packs a trace, until n are
+static uint8_t *trace;
+static uint32_t trace_max, trace_n;
+
 static uint8_t tspico_frame(uint8_t op, uint8_t value, void *ctx) {
+    uint8_t b;
     if (op != TS2068_TSPICO_IN_DATA) {
-        return p4bridge_frame(op, value);
-    }
-    int64_t t = esp_timer_get_time();
-    uint8_t b = p4bridge_frame(op, value);
-    uint32_t dt = esp_timer_get_time() - t;
-    if (dt > 1000) {
-        r.pico_waits++;
-        r.pico_wait_us += dt;
-        if (dt > r.pico_wait_max) {
-            r.pico_wait_max = dt;
+        b = p4bridge_frame(op, value);
+    } else {
+        int64_t t = esp_timer_get_time();
+        b = p4bridge_frame(op, value);
+        uint32_t dt = esp_timer_get_time() - t;
+        if (dt > 1000) {
+            r.pico_waits++;
+            r.pico_wait_us += dt;
+            if (dt > r.pico_wait_max) {
+                r.pico_wait_max = dt;
+            }
         }
+    }
+    if (trace_n < trace_max) {
+        uint8_t *p = trace + 3 * trace_n;
+        p[0] = op;
+        p[1] = value;
+        p[2] = b;
+        trace_n++;
     }
     return b;
 }
+
+// pico_trace(n): start keeping the next n frames (0 stops and frees);
+// pico_trace(): the frames kept so far, as bytes
+static mp_obj_t pico_trace(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        uint32_t n = trace_n;
+        return mp_obj_new_bytes(trace, 3 * n);
+    }
+    uint32_t n = mp_obj_get_int(args[0]);
+    trace_max = 0;                      // the run task stops adding
+    __sync_synchronize();
+    heap_caps_free(trace);
+    trace = NULL;
+    trace_n = 0;
+    if (n) {
+        trace = heap_caps_malloc(3 * n, MALLOC_CAP_SPIRAM);
+        if (!trace) {
+            mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("pico_trace"));
+        }
+        __sync_synchronize();
+        trace_max = n;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(pico_trace_obj, 0, 1, pico_trace);
 
 static mp_obj_t run(size_t n_args, const mp_obj_t *args) {
     if (r.running || b.state == RUNNING) {
@@ -571,6 +613,7 @@ static const mp_rom_map_elem_t ts2068_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_snapshot), MP_ROM_PTR(&snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_load_snapshot), MP_ROM_PTR(&load_snapshot_obj) },
     { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&keys_obj) },
+    { MP_ROM_QSTR(MP_QSTR_pico_trace), MP_ROM_PTR(&pico_trace_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd), MP_ROM_PTR(&osd_obj) },
     { MP_ROM_QSTR(MP_QSTR_osd_tap), MP_ROM_PTR(&osd_tap_obj) },
     { MP_ROM_QSTR(MP_QSTR_stop), MP_ROM_PTR(&stop_obj) },
